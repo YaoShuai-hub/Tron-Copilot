@@ -1,0 +1,32 @@
+# Trident MCP config (TOML)
+
+# Server port
+port = 8787
+
+# API endpoints
+tronscan_base = "https://apilist.tronscanapi.com/api"
+trongrid_base = "https://api.trongrid.io"
+
+# TronGrid / TronScan API Keys (set via environment in production)
+# In repo we keep placeholders to avoid leaking secrets.
+tronscan_api_key = "<set-via-env>"
+trongrid_api_key = "<set-via-env>"
+
+
+# USDT contract (TRC20)
+usdt_contract = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
+
+# Request timeout (seconds)
+request_timeout = 12.0
+
+# Logging
+log_level = "INFO"        # DEBUG/INFO/WARNING/ERROR
+log_file = "logs/trident.log"             # empty => console only
+# Safety / humanization
+safety_enable = true      # add human-readable annotations to tool outputs
+
+# AI provider (optional, for LLM-driven tool orchestration)
+ai_api_base = "https://api.deepseek.com/v1"
+ai_api_key = "<set-via-env>"
+ai_model = "deepseek-chat"
+ai_provider = "openai"   # openai | azure-openai | anthropic | custom

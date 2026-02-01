@@ -1,0 +1,11 @@
+{
+  "name": "trident-mcp",
+  "version": "0.2.0",
+  "description": "Trident MCP server: MCP-compatible JSON-RPC server that wraps TRONSCAN/TRONGRID for AI agents.",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "license": "MIT"
+}
