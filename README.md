@@ -1,86 +1,94 @@
-# Trident MCP (TRON)
+# 🚀 Trident MCP (TRON)
 
-Minimal FastMCP stdio server that exposes a handful of TRON helpers as MCP tools. Runs fully on Python stdlib plus `fastmcp`, and ships a colored CLI agent for interactive use.
+轻量级 FastMCP stdio 服务器 + 彩色 CLI Agent，帮你快速查询 TRON 费用、USDT 余额、交易状态、TRC20 转账与地址标签。纯 Python，零本地节点依赖。
 
-## What it can do
-- `get_usdt_balance(address)` — TRC20 USDT balance from TRONSCAN.
-- `get_network_params()` — chain fee parameters from TRONGRID.
-- `get_tx_status(txid)` — transaction confirmation + receipt summary from TRONGRID.
-- `get_recent_transactions(address, limit)` — latest account tx list (TRONGRID primary, TRONSCAN fallback).
-- `get_trc20_transfers(address, limit)` — latest TRC20 transfers for an address (same fallback).
-- `get_address_labels(address)` — labels/flags from TRONSCAN (contract, shielded, name, tags).
+## ✨ 亮点
+- 🔌 即插即用：安装依赖即可跑；stdio MCP 兼容。
+- 🛡️ 双源容错：TRONGRID 主用，TRONSCAN 备援（交易/转账）。
+- 🤖 LLM 编排：可选接入 DeepSeek/OpenAI/Anthropic，自动 tool-call。
+- 🌈 友好 UI：彩色 CLI Agent，支持 `--debug` 查看 LLM 往返。
 
-## Quick start
+## 🧰 可用工具
+| 工具 | 作用 | 数据源 | 备注 |
+| --- | --- | --- | --- |
+| `get_network_params` | 网络能量/带宽/建号费用等 | TRONGRID | 费用基线 |
+| `get_usdt_balance(address)` | TRC20 USDT 余额 | TRONSCAN | 可含 `_human_notes` |
+| `get_tx_status(txid)` | 交易确认 + 收据 | TRONGRID | 64 hex |
+| `get_recent_transactions(address, limit)` | 最近交易列表 | TRONGRID → TRONSCAN | 主备切换 |
+| `get_trc20_transfers(address, limit)` | 最近 TRC20 转账 | TRONGRID → TRONSCAN | 主备切换 |
+| `get_address_labels(address)` | 地址名称/标签/是否合约/是否屏蔽 | TRONSCAN | 标签查询 |
+
+## ⚡ 快速开始
 ```bash
 cd ~/Documents/ctf/blockchain/program/HK_hacker_26/trident-mcp
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt      # installs fastmcp and deps
+pip3 install -r requirements.txt
 ```
 
-Run the MCP server (stdio, no HTTP port):
+运行 MCP 服务器（stdio）：
 ```bash
-python run.py
+python3 run.py
 ```
 
-Use the colorful CLI agent (multi‑turn, auto tool-calls):
+彩色 CLI Agent（自动多轮工具调用）：
 ```bash
-python -m agents.agent_runner
-# or single prompt:
-python -m agents.agent_runner --prompt "Show me TRON energy and bandwidth fees."
-# debug模式(打印LLM请求/响应)： 
-python -m agents.agent_runner --debug --prompt "List the last 5 transactions for address THb4CqiFdwNHsWsQCs4JhzwjMWys4aqCbF."
+python3 -m agents.agent_runner
+# 单句：
+python3 -m agents.agent_runner --prompt "Show me TRON energy and bandwidth fees."
+# 调试（打印 LLM 请求/响应）：
+python3 -m agents.agent_runner --debug --prompt "List the last 5 transactions for address THb4CqiFdwNHsWsQCs4JhzwjMWys4aqCbF."
 ```
 
-Optional Textual TUI (if you want a paneled UI; otherwise ignore):
+可选 Textual TUI：
 ```bash
-pip install textual
-python -m agents.tui_app
+pip3 install textual
+python3 -m agents.tui_app
 ```
 
-JSON-RPC (if you connect through a bridge):
+JSON-RPC 示例（若通过桥接）：
 ```bash
 curl -X POST http://localhost:8787/ \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"list_tools"}'
 ```
 
-## Configuration
-`config.toml` is read first, then env vars override:
+## 🔧 配置 (config.toml / 环境变量)
 ```
-PORT                     (port)
-TRONSCAN_BASE            (default https://apilist.tronscanapi.com/api)
-TRONGRID_BASE            (default https://api.trongrid.io)
+PORT
+TRONSCAN_BASE      (默认 https://apilist.tronscanapi.com/api)
+TRONGRID_BASE      (默认 https://api.trongrid.io)
+TRONSCAN_API_KEY   (TRC20/labels 备份查询)
 TRONGRID_API_KEY | TRON_PRO_API_KEY
-TRONSCAN_API_KEY         (for TRC20 transfers/address labels fallback)
-TRON_USDT_CONTRACT       (default TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t)
+TRON_USDT_CONTRACT (默认 TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t)
 REQUEST_TIMEOUT_MS
 LOG_LEVEL, LOG_FILE
-AI_API_BASE, AI_API_KEY, AI_MODEL, AI_PROVIDER  # optional for LLM features
-SAFETY_ENABLE            (true/false)
+AI_API_BASE, AI_API_KEY, AI_MODEL, AI_PROVIDER  # 可选，启用 LLM 编排
+SAFETY_ENABLE      (true/false，控制 _human_notes)
 ```
+👉 建议把真实 key 放 `.env`（已在 `.gitignore`），示例见 `.env.example`。
 
-## Repo map (essentials)
-- `run.py` — FastMCP entrypoint; registers tools, starts stdio server.
-- `tron_mcp/tools.py` — tool logic & validation.
-- `tron_mcp/tron_api.py` — HTTP helpers to TRONSCAN/TRONGRID.
-- `tron_mcp/safety.py` — optional `_human_notes` annotator for hashes/addresses.
-- `tron_mcp/settings.py` — loads config.toml + env overrides.
-- `tron_mcp/ai/client.py` — generic chat client for OpenAI/DeepSeek/Anthropic/etc.
-- `agents/agent_runner.py` — colored CLI agent (recommended).
-- `agents/ai_llm_tool_call.py` — minimal LLM call demo.
-- `agents/tui_app.py` — Textual TUI (optional).
-- `tool_smoke.py` — quick CLI smoke for the core tools (network/usdt/tx_status).
+## 📂 目录速览
+- `run.py` — FastMCP 入口。
+- `tron_mcp/tools.py` — 工具实现与校验。
+- `tron_mcp/tron_api.py` — TRONSCAN/TRONGRID HTTP helper（自动附加 API key）。
+- `tron_mcp/safety.py` — `_human_notes` 注释器。
+- `tron_mcp/settings.py` — 读取 config.toml + env。
+- `tron_mcp/ai/client.py` — LLM 客户端（OpenAI/DeepSeek/Anthropic 等）。
+- `agents/agent_runner.py` — 彩色 CLI agent（推荐）。
+- `agents/ai_llm_tool_call.py` — 极简 LLM demo。
+- `agents/tui_app.py` — Textual TUI（可选）。
+- `tool_smoke.py` — 快速烟测脚本。
 
-## Notes
-- Pure stdlib networking; no local node needed. Network connectivity to TRONSCAN/TRONGRID is required for live data.
-- Safety enrichment is on by default; set `SAFETY_ENABLE=false` to remove `_human_notes`.
-- Keep your `ai_api_key` out of the repo; use env vars for secrets.
+## 💬 常用提示 (REPL / agent_runner 可直接粘贴)
+- Q1: Show me the current TRON network energy fee and bandwidth fee.
+- Q2: Check the USDT balance of TPwjKc2nfSb6Zxk4sZDSZu6f9QaK3xktAP.
+- Q3: Is transaction 17c46bf2625aaf21b28a0c54783715d63380ccdb3d1134c8365e2f6c4 confirmed?
+- Q4: List the last 5 transactions for address THb4CqiFdwNHsWsQCs4JhzwjMWys4aqCbF.
+- Q5: Show the latest 5 TRC20 transfers involving address THb4CqiFdwNHsWsQCs4JhzwjMWys4aqCbF.
+- Q6: What labels or flags does TRON address THb4CqiFdwNHsWsQCs4JhzwjMWys4aqCbF have?
 
-## Handy prompts (REPL / agent_runner)
-- Q1: “Show me the current TRON network energy fee and bandwidth fee.”
-- Q2: “Check the USDT balance of TPwjKc2nfSb6Zxk4sZDSZu6f9QaK3xktAP.”
-- Q3: “Is transaction 17c46bf2625aaf21b28a0c54783715d63380ccdb3d1134c8365e2f6c4 confirmed?”
-- Q4: “List the last 5 transactions for address THb4CqiFdwNHsWsQCs4JhzwjMWys4aqCbF.”
-- Q5: “Show the latest 5 TRC20 transfers involving address THb4CqiFdwNHsWsQCs4JhzwjMWys4aqCbF.”
-- Q6: “What labels or flags does TRON address THb4CqiFdwNHsWsQCs4JhzwjMWys4aqCbF have?”
+## 🧭 排障小抄
+- 400/401：检查 TRONSCAN/TRONGRID API key 是否有效或控制台是否限制来源。
+- 没有 `_human_notes`：确认 `SAFETY_ENABLE` 未被设为 false。
+- LLM 405/超时：加 `--debug` 看往返；必要时依赖本地 fallback（工具结果仍会显示）。
