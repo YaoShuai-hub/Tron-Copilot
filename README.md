@@ -8,37 +8,50 @@
 - 🤖 LLM 编排：可选接入 DeepSeek/OpenAI/Anthropic，自动 tool-call。
 - 🌈 友好 UI：彩色 CLI Agent，支持 `--debug` 查看 LLM 往返。
 
-## 🧰 可用工具
+## 🧰 可用工具（按模块）
+
+### 1) Core TRON 查询
 | 工具 | 作用 | 数据源 | 备注 |
 | --- | --- | --- | --- |
 | `get_network_params` | 网络能量/带宽/建号费用等 | TRONGRID | 费用基线 |
-| `get_usdt_balance(address)` | TRC20 USDT 余额 | TRONSCAN | 可含 `_human_notes` |
 | `get_trx_balance(address)` | TRX 余额 | TRONGRID | 基础账户余额 |
+| `get_usdt_balance(address)` | TRC20 USDT 余额 | TRONSCAN | 可含 `_human_notes` |
 | `get_tx_status(txid)` | 交易确认 + 收据 | TRONGRID | 64 hex |
 | `get_recent_transactions(address, limit)` | 最近交易列表 | TRONGRID → TRONSCAN | 主备切换 |
 | `get_trc20_transfers(address, limit)` | 最近 TRC20 转账 | TRONGRID → TRONSCAN | 主备切换 |
 | `get_address_labels(address)` | 地址名称/标签/是否合约/是否屏蔽 | TRONSCAN | 标签查询 |
+
+### 2) TRON 交易构建/签名
+| 工具 | 作用 | 数据源 | 备注 |
+| --- | --- | --- | --- |
 | `create_unsigned_trx_transfer(from_address, to_address, amount_trx?, amount_sun?)` | 生成未签名 TRX 转账 | TRONGRID | 用户签名后广播 |
 | `create_unsigned_trc20_transfer(from_address, to_address, token_contract?, amount?, amount_raw?, decimals?)` | 生成未签名 TRC20 转账 | TRONGRID | 用户签名后广播 |
+| `sign_transaction(unsigned_tx, env_path?)` | 本地私钥签名 | 本地 | 读取 `.env.private` |
+| `broadcast_signed_transaction(signed_tx)` | 广播已签名交易 | TRONGRID | 返回广播结果 |
+
+### 3) Agent Pipeline
+| 工具 | 作用 | 数据源 | 备注 |
+| --- | --- | --- | --- |
 | `agent_parse_intent(prompt)` | 解析自然语言意图 | 本地 | 启发式解析 |
 | `agent_prepare_transaction(prompt)` | 生成确认摘要 + 未签名交易 | TRONGRID | 多层流程 |
 | `agent_request_signature(unsigned_tx)` | 生成签名请求 | 本地 | 不保存私钥 |
-| `sign_transaction(unsigned_tx, env_path?)` | 本地私钥签名 | 本地 | 读取 `.env.private` |
-| `broadcast_signed_transaction(signed_tx)` | 广播已签名交易 | TRONGRID | 返回广播结果 |
-| `transfer_trx_local_sign_broadcast(from_address, to_address, amount_trx?, amount_sun?, env_path?)` | TRX 转账（本地签名 + 广播） | TRONGRID | 读取 `.env.private` |
+
+### 4) 任务模块：链上与资金流
+| 工具 | 作用 | 数据源 | 备注 |
+| --- | --- | --- | --- |
 | `chain_transfer_flow(...)` | 一站式转账（构建/签名/广播） | 混合 | 任务模块 |
 | `chain_tx_status(txid)` | 交易状态（带 from/to） | TRONGRID | 任务模块 |
 | `prepare_deposit_withdraw(...)` | 充值/提现规划 | 本地/链上 | 任务模块 |
-| `send_telegram(message, ...)` | Telegram 通知 | Telegram | 任务模块 |
-| `telegram_subscribe(chat_id?, label?)` | 订阅 Telegram | Telegram | 任务模块 |
-| `telegram_unsubscribe(chat_id?)` | 取消订阅 Telegram | Telegram | 任务模块 |
-| `telegram_list_subscribers()` | 查看订阅列表 | Telegram | 任务模块 |
-| `telegram_broadcast(message, ...)` | 向订阅者群发 | Telegram | 任务模块 |
-| `audit_log_event(event, path?)` | 写入审计日志 | 本地 | 任务模块 |
-| `audit_get_logs(limit?, path?)` | 读取审计日志 | 本地 | 任务模块 |
-| `audit_reconcile(txids, path?)` | 对账（查链上状态） | TRONGRID | 任务模块 |
+
+### 5) 任务模块：市场数据
+| 工具 | 作用 | 数据源 | 备注 |
+| --- | --- | --- | --- |
 | `get_orderbook(symbol?, limit?, notify?, chat_id?, broadcast?)` | 盘口快照 | REST | 任务模块 |
 | `get_kline(symbol?, interval?, limit?, notify?, chat_id?, broadcast?)` | K线数据 | REST | 任务模块 |
+
+### 6) 任务模块：交易所适配（CCXT）
+| 工具 | 作用 | 数据源 | 备注 |
+| --- | --- | --- | --- |
 | `exchange_get_balance(...)` | 交易所余额（CCXT） | REST | 任务模块 |
 | `exchange_get_deposit_address(...)` | 交易所充值地址（CCXT） | REST | 任务模块 |
 | `exchange_withdraw(...)` | 交易所提现（CCXT） | REST | 任务模块 |
@@ -47,6 +60,22 @@
 | `exchange_create_order(...)` | 交易所下单（CCXT） | REST | 任务模块 |
 | `exchange_cancel_order(...)` | 交易所撤单（CCXT） | REST | 任务模块 |
 | `exchange_fetch_order(...)` | 交易所查单（CCXT） | REST | 任务模块 |
+
+### 7) 任务模块：通知与审计
+| 工具 | 作用 | 数据源 | 备注 |
+| --- | --- | --- | --- |
+| `send_telegram(message, ...)` | Telegram 通知 | Telegram | 任务模块 |
+| `telegram_subscribe(chat_id?, label?)` | 订阅 Telegram | Telegram | 任务模块 |
+| `telegram_unsubscribe(chat_id?)` | 取消订阅 Telegram | Telegram | 任务模块 |
+| `telegram_list_subscribers()` | 查看订阅列表 | Telegram | 任务模块 |
+| `telegram_broadcast(message, ...)` | 向订阅者群发 | Telegram | 任务模块 |
+| `audit_log_event(event, path?)` | 写入审计日志 | 本地 | 任务模块 |
+| `audit_get_logs(limit?, path?)` | 读取审计日志 | 本地 | 任务模块 |
+| `audit_reconcile(txids, path?)` | 对账（查链上状态） | TRONGRID | 任务模块 |
+
+### 8) 资产估值
+| 工具 | 作用 | 数据源 | 备注 |
+| --- | --- | --- | --- |
 | `get_token_balance(address, token)` | 任意币种余额（TRX/TRC20） | TRONSCAN | symbol/合约 |
 | `get_total_value(address, currency)` | 所有币种总价值 | TRONSCAN + CoinGecko | usd/cny |
 | `run_bash_command(command, cwd?, timeout_sec?, max_output_chars?)` | 执行本地 bash 指令 | 本地 | 仅限仓库内路径 |
