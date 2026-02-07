@@ -92,6 +92,22 @@ SAFETY_ENABLE      (true/false，控制 _human_notes)
 ```
 👉 建议把真实 key 放 `.env`（已在 `.gitignore`），示例见 `.env.example`。
 
+**私钥配置（本地签名专用）**
+1. 复制示例文件：
+```bash
+cp .env.private.example .env.private
+```
+2. 填写私钥（十六进制，不带 `0x`）：
+```
+TRON_PRIVATE_KEY=your_private_key_hex
+```
+3. 使用本地签名工具：
+```bash
+python3 -c "from tron_mcp.extensions.local_signer import sign_transaction; print(sign_transaction({'txID':'...','raw_data_hex':'...'}))"
+```
+
+`.env.private` 已加入 `.gitignore`，不会被提交。
+
 ## 📄 提交材料与文档
 - 部署文档: [../DEPLOYMENT.md](../DEPLOYMENT.md)
 - API 文档: [../API.md](../API.md)
