@@ -30,6 +30,6 @@ safety_enable = true      # add human-readable annotations to tool outputs
 
 # AI provider (optional, for LLM-driven tool orchestration)
 ai_api_base = "https://ark.cn-beijing.volces.com/api/v3"
-ai_api_key = "c8fa0fe0-1e34-4f2e-b177-5faf1dea0100"
+ai_api_key = "<your_key>"
 ai_model = "doubao-seed-1-8-251228"
 ai_provider = "openai"   # openai | azure-openai | anthropic | custom
