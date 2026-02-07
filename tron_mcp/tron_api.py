@@ -7,6 +7,7 @@ import logging
 from typing import Any, Dict, Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+from urllib.parse import quote
 
 from . import settings
 from .utils.errors import UpstreamError
@@ -135,4 +136,24 @@ def fetch_trc20_transfers_tronscan(address: str, limit: int = 20, start: int = 0
         f"{settings.SETTINGS.tronscan_base}/token_trc20/transfers"
         f"?relatedAddress={address}&limit={limit}&start={start}&sort=-timestamp"
     )
+    return fetch_json(url)
+
+
+# --- Pricing (CoinGecko) ----------------------------------------------------
+
+def fetch_tron_token_prices(contracts: list[str], vs_currency: str) -> Dict[str, Any]:
+    """Fetch TRC20 token prices by contract address on TRON (CoinGecko)."""
+    if not contracts:
+        return {}
+    contract_param = quote(",".join(contracts))
+    url = (
+        f"{settings.SETTINGS.coingecko_base}/simple/token_price/tron"
+        f"?contract_addresses={contract_param}&vs_currencies={vs_currency}"
+    )
+    return fetch_json(url)
+
+
+def fetch_trx_price(vs_currency: str) -> Dict[str, Any]:
+    """Fetch TRX price (CoinGecko)."""
+    url = f"{settings.SETTINGS.coingecko_base}/simple/price?ids=tron&vs_currencies={vs_currency}"
     return fetch_json(url)

@@ -25,6 +25,7 @@ class Settings:
     tronscan_api_key: str = ""
     trongrid_api_key: str = ""
     usdt_contract: str = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
+    coingecko_base: str = "https://api.coingecko.com/api/v3"
     request_timeout: float = 12.0  # seconds
     log_level: str = "INFO"
     log_file: str | None = "logs/trident.log"  # None or empty => stdout only
@@ -45,6 +46,7 @@ def _apply_env_overrides(cfg: Settings) -> Settings:
         "TRONGRID_API_KEY", os.getenv("TRON_PRO_API_KEY", cfg.trongrid_api_key)
     )
     cfg.usdt_contract = os.getenv("TRON_USDT_CONTRACT", cfg.usdt_contract)
+    cfg.coingecko_base = os.getenv("COINGECKO_BASE", cfg.coingecko_base)
     timeout_ms = os.getenv("REQUEST_TIMEOUT_MS")
     if timeout_ms:
         try:
@@ -77,6 +79,7 @@ def load_config(path: Path | None = None) -> Settings:
         cfg.tronscan_api_key = data.get("tronscan_api_key", cfg.tronscan_api_key)
         cfg.trongrid_api_key = data.get("trongrid_api_key", cfg.trongrid_api_key)
         cfg.usdt_contract = data.get("usdt_contract", cfg.usdt_contract)
+        cfg.coingecko_base = data.get("coingecko_base", cfg.coingecko_base)
         cfg.request_timeout = float(data.get("request_timeout", cfg.request_timeout))
         cfg.log_level = str(data.get("log_level", cfg.log_level)).upper()
         cfg.log_file = data.get("log_file") or None

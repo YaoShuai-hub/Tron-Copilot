@@ -24,6 +24,16 @@ Exposed tools (all return JSON-serializable dicts):
         Input: 64-character hex transaction id.
         Return: {txid, status, blockNumber, blockTime, feeSun, energyUsage, rawMeta, rawReceipt}
         Example: mcp.call_tool("get_tx_status", {"txid": "<tx_hash>"})
+
+    get_token_balance(address: str, token: str) -> dict
+        Input: TRON base58 address + token symbol/contract (TRX/USDT or contract address).
+        Return: {address, token{symbol,contract,decimals,name,matchedBy}, balance{raw,human,decimals}, source, apiUrl, updated}
+        Example: mcp.call_tool("get_token_balance", {"address": "T...", "token": "USDT"})
+
+    get_total_value(address: str, currency: str = "usd") -> dict
+        Input: TRON base58 address + currency (usd/cny).
+        Return: {address, currency, totalValue, items[], missingPrices, pricingSource, apiUrl, updated}
+        Example: mcp.call_tool("get_total_value", {"address": "T...", "currency": "cny"})
 """
 
 import sys
@@ -130,6 +140,37 @@ def tool_get_address_labels(address: str) -> dict:
         mcp.call_tool("get_address_labels", {"address": "THb4CqiFdwNHsWsQCs4JhzwjMWys4aqCbF"})
     """
     return safety.enrich(tools.get_address_labels(address))
+
+
+@mcp.tool(name="get_token_balance", description="Fetch TRX/TRC20 balance by symbol or contract (TRONSCAN).")
+def tool_get_token_balance(address: str, token: str) -> dict:
+    """Token balance for a TRON address.
+
+    Args:
+        address: TRON Base58 address starting with 'T'.
+        token: Token symbol (e.g. TRX/USDT) or TRC20 contract address.
+    Returns:
+        Dict with address, token{symbol,contract,decimals,name,matchedBy},
+        balance{raw,human,decimals}, source, apiUrl, updated.
+    Example:
+        mcp.call_tool("get_token_balance", {"address": "TPw...", "token": "TRX"})
+    """
+    return safety.enrich(tools.get_token_balance(address, token))
+
+
+@mcp.tool(name="get_total_value", description="Compute total value (TRX+TRC20) in USD/CNY.")
+def tool_get_total_value(address: str, currency: str = "usd") -> dict:
+    """Total portfolio value in USD/CNY using CoinGecko pricing.
+
+    Args:
+        address: TRON Base58 address starting with 'T'.
+        currency: "usd" or "cny".
+    Returns:
+        Dict with address, currency, totalValue, items, missingPrices, pricingSource, apiUrl.
+    Example:
+        mcp.call_tool("get_total_value", {"address": "TPw...", "currency": "usd"})
+    """
+    return safety.enrich(tools.get_total_value(address, currency))
 
 
 def main() -> int:
