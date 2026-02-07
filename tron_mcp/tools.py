@@ -8,6 +8,8 @@ from typing import Any, Dict, List, Optional
 
 from . import settings
 from .extensions import tx_assistant, trc20_assistant, agent_pipeline, local_signer
+from .modules import chain_ops, funds_flow, notify_telegram
+from .modules import audit_log, market_data, exchange_adapter
 from .utils.errors import ValidationError
 from .tron_api import (
     fetch_account,
@@ -149,6 +151,12 @@ def list_tools() -> Dict[str, Any]:
     tools.extend(trc20_assistant.TOOL_DEFINITIONS)
     tools.extend(agent_pipeline.TOOL_DEFINITIONS)
     tools.extend(local_signer.TOOL_DEFINITIONS)
+    tools.extend(chain_ops.TOOL_DEFINITIONS)
+    tools.extend(funds_flow.TOOL_DEFINITIONS)
+    tools.extend(notify_telegram.TOOL_DEFINITIONS)
+    tools.extend(audit_log.TOOL_DEFINITIONS)
+    tools.extend(market_data.TOOL_DEFINITIONS)
+    tools.extend(exchange_adapter.TOOL_DEFINITIONS)
     return {"tools": tools}
 
 
@@ -698,6 +706,18 @@ def call_tool(name: str, args: Optional[Dict[str, Any]]) -> Any:
         return agent_pipeline.call_tool(name, args)
     if name in local_signer.TOOL_NAMES:
         return local_signer.call_tool(name, args)
+    if name in chain_ops.TOOL_NAMES:
+        return chain_ops.call_tool(name, args)
+    if name in funds_flow.TOOL_NAMES:
+        return funds_flow.call_tool(name, args)
+    if name in notify_telegram.TOOL_NAMES:
+        return notify_telegram.call_tool(name, args)
+    if name in audit_log.TOOL_NAMES:
+        return audit_log.call_tool(name, args)
+    if name in market_data.TOOL_NAMES:
+        return market_data.call_tool(name, args)
+    if name in exchange_adapter.TOOL_NAMES:
+        return exchange_adapter.call_tool(name, args)
     if name == "get_token_balance":
         return get_token_balance(address=args.get("address"), token=args.get("token"))
     if name == "get_total_value":

@@ -40,3 +40,22 @@ ai_model = "glm-4-7-251222"
 #ai_api_key = "sk-1afd019acba54287856b9008e0347473"
 #ai_model = "deepseek-chat"
 ai_provider = "openai"   # openai | azure-openai | anthropic | custom
+
+# Telegram (optional)
+telegram_bot_token = ""
+telegram_chat_id = ""
+telegram_subscribers_path = "logs/telegram_subscribers.json"
+
+# Audit log directory
+audit_log_dir = "logs/transactions"
+
+# Market data base (public REST)
+market_data_base = "https://data-api.binance.vision"
+
+# Exchange (optional, via CCXT)
+exchange_id = ""
+exchange_api_key = ""
+exchange_secret = ""
+exchange_password = ""
+exchange_api_domain = ""
+exchange_proxy = ""

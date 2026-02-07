@@ -34,6 +34,18 @@ class Settings:
     ai_model: str | None = None
     ai_provider: str = "openai"  # openai | azure-openai | anthropic | custom
     safety_enable: bool = True
+    telegram_bot_token: str | None = None
+    telegram_chat_id: str | None = None
+    telegram_subscribers_path: str = "logs/telegram_subscribers.json"
+    audit_log_dir: str = "logs/transactions"
+    market_data_base: str = "https://api.binance.com"
+    exchange_id: str | None = None
+    exchange_api_key: str | None = None
+    exchange_secret: str | None = None
+    exchange_password: str | None = None
+    exchange_api_domain: str | None = None
+    exchange_proxy: str | None = None
+    exchange_api_domain: str | None = None
 
 
 def _apply_env_overrides(cfg: Settings) -> Settings:
@@ -59,6 +71,20 @@ def _apply_env_overrides(cfg: Settings) -> Settings:
     cfg.ai_api_key = os.getenv("AI_API_KEY", cfg.ai_api_key)
     cfg.ai_model = os.getenv("AI_MODEL", cfg.ai_model)
     cfg.ai_provider = os.getenv("AI_PROVIDER", cfg.ai_provider)
+    cfg.telegram_bot_token = os.getenv("TELEGRAM_BOT_TOKEN", cfg.telegram_bot_token)
+    cfg.telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID", cfg.telegram_chat_id)
+    cfg.telegram_subscribers_path = os.getenv(
+        "TELEGRAM_SUBSCRIBERS_PATH", cfg.telegram_subscribers_path
+    )
+    cfg.audit_log_dir = os.getenv("AUDIT_LOG_DIR", cfg.audit_log_dir)
+    cfg.market_data_base = os.getenv("MARKET_DATA_BASE", cfg.market_data_base)
+    cfg.exchange_id = os.getenv("EXCHANGE_ID", cfg.exchange_id)
+    cfg.exchange_api_key = os.getenv("EXCHANGE_API_KEY", cfg.exchange_api_key)
+    cfg.exchange_secret = os.getenv("EXCHANGE_SECRET", cfg.exchange_secret)
+    cfg.exchange_password = os.getenv("EXCHANGE_PASSWORD", cfg.exchange_password)
+    cfg.exchange_api_domain = os.getenv("EXCHANGE_API_DOMAIN", cfg.exchange_api_domain)
+    cfg.exchange_proxy = os.getenv("EXCHANGE_PROXY", cfg.exchange_proxy)
+    cfg.exchange_api_domain = os.getenv("EXCHANGE_API_DOMAIN", cfg.exchange_api_domain)
     safety_env = os.getenv("SAFETY_ENABLE")
     if safety_env is not None:
         cfg.safety_enable = safety_env.lower() in {"1", "true", "yes", "on"}
@@ -89,6 +115,17 @@ def load_config(path: Path | None = None) -> Settings:
         cfg.ai_provider = data.get("ai_provider", cfg.ai_provider)
         if "safety_enable" in data:
             cfg.safety_enable = bool(data.get("safety_enable"))
+        cfg.exchange_id = data.get("exchange_id", cfg.exchange_id)
+        cfg.exchange_api_key = data.get("exchange_api_key", cfg.exchange_api_key)
+        cfg.exchange_secret = data.get("exchange_secret", cfg.exchange_secret)
+        cfg.exchange_password = data.get("exchange_password", cfg.exchange_password)
+        cfg.exchange_api_domain = data.get("exchange_api_domain", cfg.exchange_api_domain)
+        cfg.exchange_proxy = data.get("exchange_proxy", cfg.exchange_proxy)
+        cfg.exchange_id = data.get("exchange_id", cfg.exchange_id)
+        cfg.exchange_api_key = data.get("exchange_api_key", cfg.exchange_api_key)
+        cfg.exchange_secret = data.get("exchange_secret", cfg.exchange_secret)
+        cfg.exchange_password = data.get("exchange_password", cfg.exchange_password)
+        cfg.exchange_api_domain = data.get("exchange_api_domain", cfg.exchange_api_domain)
 
     return _apply_env_overrides(cfg)
 
