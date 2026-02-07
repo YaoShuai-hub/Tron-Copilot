@@ -3,14 +3,14 @@
 # Server port
 port = 8787
 
-# API endpoints
-tronscan_base = "https://apilist.tronscanapi.com/api"
-trongrid_base = "https://api.trongrid.io"
+# API endpoints (Nile testnet by default for hackathon demos)
+tronscan_base = "https://nileapi.tronscan.org"
+trongrid_base = "https://nile.trongrid.io"
 
 # TronGrid / TronScan API Keys (set via environment in production)
-# In repo we keep placeholders to avoid leaking secrets.
-tronscan_api_key = "<set-via-env>"
-trongrid_api_key = "<set-via-env>"
+# Keep empty in repo to avoid leaking secrets.
+tronscan_api_key = ""
+trongrid_api_key = ""
 
 
 # USDT contract (TRC20)

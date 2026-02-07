@@ -55,11 +55,24 @@ curl -X POST http://localhost:8787/ \
   -d '{"jsonrpc":"2.0","id":1,"method":"list_tools"}'
 ```
 
+## 🧪 测试网与主网
+开发与演示默认使用 Nile 测试网：
+- TronGrid Nile: https://nile.trongrid.io （无需 API key，QPS 50/单 IP）
+- TronScan Nile: https://nileapi.tronscan.org （无需 API key，QPS 50/单 IP）
+- 浏览器: https://nile.tronscan.org/
+- 水龙头: https://nileex.io/join/getJoinPage
+
+如需切回主网，在环境变量里覆盖：
+```bash
+export TRONGRID_BASE=https://api.trongrid.io
+export TRONSCAN_BASE=https://apilist.tronscanapi.com/api
+```
+
 ## 🔧 配置 (config.toml / 环境变量)
 ```
 PORT
-TRONSCAN_BASE      (默认 https://apilist.tronscanapi.com/api)
-TRONGRID_BASE      (默认 https://api.trongrid.io)
+TRONSCAN_BASE      (默认 https://nileapi.tronscan.org)
+TRONGRID_BASE      (默认 https://nile.trongrid.io)
 TRONSCAN_API_KEY   (TRC20/labels 备份查询)
 TRONGRID_API_KEY | TRON_PRO_API_KEY
 TRON_USDT_CONTRACT (默认 TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t)
@@ -70,6 +83,14 @@ AI_API_BASE, AI_API_KEY, AI_MODEL, AI_PROVIDER  # 可选，启用 LLM 编排
 SAFETY_ENABLE      (true/false，控制 _human_notes)
 ```
 👉 建议把真实 key 放 `.env`（已在 `.gitignore`），示例见 `.env.example`。
+
+## 📄 提交材料与文档
+- 部署文档: [../DEPLOYMENT.md](../DEPLOYMENT.md)
+- API 文档: [../API.md](../API.md)
+
+## ✅ 开源合规与创新
+- 允许使用开源库/模板，但需在代码注释或文档中标注来源。
+- 核心业务逻辑需原创或有明显改造，避免整项目复制粘贴。
 
 ## 📂 目录速览
 - `run.py` — FastMCP 入口。
