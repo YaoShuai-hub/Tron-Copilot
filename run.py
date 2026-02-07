@@ -31,6 +31,7 @@ import sys
 from fastmcp import FastMCP
 
 from tron_mcp import safety, settings, tools
+from tron_mcp.extensions import tx_assistant, trc20_assistant, agent_pipeline
 from tron_mcp.utils.logging_setup import setup_logging
 
 
@@ -55,6 +56,17 @@ def tool_get_usdt_balance(address: str) -> dict:
     """
     return safety.enrich(tools.get_usdt_balance(address))
 
+
+@mcp.tool(name="get_trx_balance", description="Fetch TRX balance for an address (TRONGRID).")
+def tool_get_trx_balance(address: str) -> dict:
+    """TRX balance for a TRON address.
+
+    Args:
+        address: TRON Base58 address starting with 'T'.
+    Returns:
+        Dict with address, balance {raw, human, decimals}, source, apiUrl, updated, raw.
+    """
+    return safety.enrich(tools.get_trx_balance(address))
 
 @mcp.tool(name="get_network_params", description="Get current TRON chain parameters (TRONGRID).")
 def tool_get_network_params() -> dict:
@@ -130,6 +142,11 @@ def tool_get_address_labels(address: str) -> dict:
         mcp.call_tool("get_address_labels", {"address": "THb4CqiFdwNHsWsQCs4JhzwjMWys4aqCbF"})
     """
     return safety.enrich(tools.get_address_labels(address))
+
+
+tx_assistant.register_mcp_tools(mcp)
+trc20_assistant.register_mcp_tools(mcp)
+agent_pipeline.register_mcp_tools(mcp)
 
 
 def main() -> int:

@@ -20,7 +20,7 @@ DEFAULT_CONFIG_PATH = REPO_ROOT / "config.toml"
 @dataclass
 class Settings:
     port: int = 8787
-    tronscan_base: str = "https://nileapi.tronscan.org"
+    tronscan_base: str = "https://nileapi.tronscan.org/api"
     trongrid_base: str = "https://nile.trongrid.io"
     tronscan_api_key: str = ""
     trongrid_api_key: str = ""

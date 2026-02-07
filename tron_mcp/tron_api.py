@@ -78,6 +78,13 @@ def fetch_account(address: str) -> Dict[str, Any]:
     return fetch_json(url)
 
 
+def fetch_account_trongrid(address: str) -> Dict[str, Any]:
+    """Fetch account payload from TRONGRID (includes TRX balance)."""
+    url = f"{settings.SETTINGS.trongrid_base}/wallet/getaccount"
+    body = {"address": address, "visible": True}
+    return fetch_json(url, method="POST", body=body)
+
+
 def fetch_chain_parameters() -> Dict[str, Any]:
     """Fetch chain parameters (energy fee, bandwidth fee, etc.)."""
     url = f"{settings.SETTINGS.trongrid_base}/wallet/getchainparameters"
@@ -136,3 +143,53 @@ def fetch_trc20_transfers_tronscan(address: str, limit: int = 20, start: int = 0
         f"?relatedAddress={address}&limit={limit}&start={start}&sort=-timestamp"
     )
     return fetch_json(url)
+
+
+# --- Transaction building ---------------------------------------------------
+
+def create_trx_transfer(
+    owner_address: str,
+    to_address: str,
+    amount_sun: int,
+) -> Dict[str, Any]:
+    """Create an unsigned TRX transfer transaction (TRONGRID).
+
+    Note: uses visible=true to accept Base58 addresses.
+    """
+    url = f"{settings.SETTINGS.trongrid_base}/wallet/createtransaction"
+    body = {
+        "owner_address": owner_address,
+        "to_address": to_address,
+        "amount": int(amount_sun),
+        "visible": True,
+    }
+    return fetch_json(url, method="POST", body=body)
+
+
+def trigger_smart_contract(
+    owner_address: str,
+    contract_address: str,
+    function_selector: str,
+    parameter: str,
+    fee_limit: int = 30_000_000,
+    call_value: int = 0,
+    visible: bool = True,
+) -> Dict[str, Any]:
+    """Create an unsigned smart contract invocation (TRONGRID)."""
+    url = f"{settings.SETTINGS.trongrid_base}/wallet/triggersmartcontract"
+    body = {
+        "owner_address": owner_address,
+        "contract_address": contract_address,
+        "function_selector": function_selector,
+        "parameter": parameter,
+        "fee_limit": int(fee_limit),
+        "call_value": int(call_value),
+        "visible": bool(visible),
+    }
+    return fetch_json(url, method="POST", body=body)
+
+
+def broadcast_transaction(signed_tx: Dict[str, Any]) -> Dict[str, Any]:
+    """Broadcast a signed transaction to the network (TRONGRID)."""
+    url = f"{settings.SETTINGS.trongrid_base}/wallet/broadcasttransaction"
+    return fetch_json(url, method="POST", body=signed_tx)

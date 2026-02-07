@@ -6,9 +6,11 @@ from dataclasses import dataclass, asdict
 from typing import Any, Dict, List, Optional
 
 from . import settings
+from .extensions import tx_assistant, trc20_assistant, agent_pipeline
 from .utils.errors import ValidationError
 from .tron_api import (
     fetch_account,
+    fetch_account_trongrid,
     fetch_chain_parameters,
     fetch_tx_info,
     fetch_tx_meta,
@@ -18,6 +20,7 @@ from .tron_api import (
     fetch_trc20_transfers_tronscan,
 )
 from .utils import format_token_amount, validate_address, validate_txid
+from .utils.encoding import tron_hex_to_b58
 from .utils.errors import UpstreamError
 
 
@@ -35,6 +38,17 @@ TOOL_DEFINITIONS: List[Tool] = [
     Tool(
         name="get_usdt_balance",
         description="Fetch TRC20 USDT balance for an address (TRONSCAN).",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "address": {"type": "string", "description": "TRON Base58 address starting with T"}
+            },
+            "required": ["address"],
+        },
+    ),
+    Tool(
+        name="get_trx_balance",
+        description="Fetch TRX balance for an address (TRONGRID).",
         inputSchema={
             "type": "object",
             "properties": {
@@ -95,7 +109,11 @@ TOOL_DEFINITIONS: List[Tool] = [
 
 def list_tools() -> Dict[str, Any]:
     """Return tool definitions for MCP list_tools."""
-    return {"tools": [t.to_dict() for t in TOOL_DEFINITIONS]}
+    tools = [t.to_dict() for t in TOOL_DEFINITIONS]
+    tools.extend(tx_assistant.TOOL_DEFINITIONS)
+    tools.extend(trc20_assistant.TOOL_DEFINITIONS)
+    tools.extend(agent_pipeline.TOOL_DEFINITIONS)
+    return {"tools": tools}
 
 
 def get_usdt_balance(address: str) -> Dict[str, Any]:
@@ -147,6 +165,25 @@ def get_usdt_balance(address: str) -> Dict[str, Any]:
     }
 
 
+def get_trx_balance(address: str) -> Dict[str, Any]:
+    """Lookup TRX balance via TRONGRID account payload."""
+    validate_address(address)
+    account = fetch_account_trongrid(address)
+    balance_sun = int(account.get("balance") or 0)
+    return {
+        "address": address,
+        "balance": {
+            "raw": str(balance_sun),
+            "human": format_token_amount(str(balance_sun), 6),
+            "decimals": 6,
+        },
+        "source": "TRONGRID",
+        "apiUrl": f"{settings.SETTINGS.trongrid_base}/wallet/getaccount",
+        "updated": None,
+        "raw": account,
+    }
+
+
 def get_network_params() -> Dict[str, Any]:
     """Return chain fee parameters summarized in sun."""
     params = fetch_chain_parameters()
@@ -194,6 +231,18 @@ def get_tx_status(txid: str) -> Dict[str, Any]:
     elif meta and meta.get("txID"):
         status = "PENDING_OR_UNCONFIRMED"
 
+    owner = None
+    to = None
+    amount = None
+    if meta:
+        raw_owner, raw_to = _extract_owner_to_from_raw(meta)
+        owner = _normalize_address(raw_owner)
+        to = _normalize_address(raw_to)
+        raw = meta.get("raw_data") or {}
+        contract = (raw.get("contract") or [{}])[0] or {}
+        value = (contract.get("parameter") or {}).get("value") or {}
+        amount = value.get("amount")
+
     return {
         "txid": txid,
         "status": status,
@@ -201,6 +250,9 @@ def get_tx_status(txid: str) -> Dict[str, Any]:
         "blockTime": info.get("blockTimeStamp") if info else None,
         "feeSun": info.get("fee") if info else None,
         "energyUsage": info.get("receipt", {}).get("energy_usage_total") if info else None,
+        "from": owner,
+        "to": to,
+        "amountSun": amount,
         "rawMeta": meta,
         "rawReceipt": info,
     }
@@ -214,6 +266,28 @@ def _direction(address: str, owner: str, to: str) -> str:
     if to == address:
         return "IN"
     return "OTHER"
+
+
+def _normalize_address(value: str | None) -> str | None:
+    if not value:
+        return None
+    if isinstance(value, str):
+        v = value.lower().replace("0x", "")
+        if len(v) == 42 and all(ch in "0123456789abcdef" for ch in v):
+            try:
+                return tron_hex_to_b58(v)
+            except Exception:
+                return value
+    return value
+
+
+def _extract_owner_to_from_raw(tx: Dict[str, Any]) -> tuple[str | None, str | None]:
+    raw = tx.get("raw_data") or {}
+    contract = (raw.get("contract") or [{}])[0] or {}
+    value = (contract.get("parameter") or {}).get("value") or {}
+    owner = value.get("owner_address") or value.get("ownerAddress")
+    to = value.get("to_address") or value.get("toAddress")
+    return owner, to
 
 
 def get_recent_transactions(address: str, limit: int = 20) -> Dict[str, Any]:
@@ -244,8 +318,12 @@ def get_recent_transactions(address: str, limit: int = 20) -> Dict[str, Any]:
             }
     items = []
     for tx in data.get("data", []):
-        owner = tx.get("ownerAddress") or tx.get("from")
-        to = tx.get("toAddress") or tx.get("to")
+        owner = _normalize_address(tx.get("ownerAddress") or tx.get("from"))
+        to = _normalize_address(tx.get("toAddress") or tx.get("to"))
+        if not owner or not to:
+            raw_owner, raw_to = _extract_owner_to_from_raw(tx)
+            owner = owner or _normalize_address(raw_owner)
+            to = to or _normalize_address(raw_to)
         txid = tx.get("txID") or tx.get("hash")
         ts = tx.get("block_timestamp") or tx.get("timestamp") or tx.get("time")
         contract_type = (tx.get("raw_data", {}).get("contract") or [{}])[0].get("type") if tx.get("raw_data") else tx.get("contractType")
@@ -255,7 +333,7 @@ def get_recent_transactions(address: str, limit: int = 20) -> Dict[str, Any]:
                 "timestamp": ts,
                 "ret": tx.get("ret"),
                 "contractType": contract_type,
-                "direction": _direction(address, owner, to),
+                "direction": _direction(address, owner or "", to or ""),
                 "from": owner,
                 "to": to,
             }
@@ -295,8 +373,8 @@ def get_trc20_transfers(address: str, limit: int = 20) -> Dict[str, Any]:
 
     items = []
     for tx in transfers:
-        owner = tx.get("from") or tx.get("from_address")
-        to = tx.get("to") or tx.get("to_address")
+        owner = _normalize_address(tx.get("from") or tx.get("from_address"))
+        to = _normalize_address(tx.get("to") or tx.get("to_address"))
         token_info = tx.get("token_info") or tx.get("tokenInfo") or {}
         amount = tx.get("value") or tx.get("quant") or tx.get("amount")
         decimals = token_info.get("tokenDecimal") or token_info.get("decimals") or 6
@@ -313,7 +391,7 @@ def get_trc20_transfers(address: str, limit: int = 20) -> Dict[str, Any]:
                 "amountHuman": format_token_amount(str(amount or 0), int(decimals)),
                 "from": owner,
                 "to": to,
-                "direction": _direction(address, owner, to),
+                "direction": _direction(address, owner or "", to or ""),
             }
         )
     return {"address": address, "count": len(items), "items": items, "source": source}
@@ -339,6 +417,8 @@ def call_tool(name: str, args: Optional[Dict[str, Any]]) -> Any:
     args = args or {}
     if name == "get_usdt_balance":
         return get_usdt_balance(address=args.get("address"))
+    if name == "get_trx_balance":
+        return get_trx_balance(address=args.get("address"))
     if name == "get_network_params":
         return get_network_params()
     if name == "get_tx_status":
@@ -349,4 +429,10 @@ def call_tool(name: str, args: Optional[Dict[str, Any]]) -> Any:
         return get_trc20_transfers(address=args.get("address"), limit=args.get("limit", 20))
     if name == "get_address_labels":
         return get_address_labels(address=args.get("address"))
+    if name in tx_assistant.TOOL_NAMES:
+        return tx_assistant.call_tool(name, args)
+    if name in trc20_assistant.TOOL_NAMES:
+        return trc20_assistant.call_tool(name, args)
+    if name in agent_pipeline.TOOL_NAMES:
+        return agent_pipeline.call_tool(name, args)
     raise ValidationError(f"Unknown tool name: {name}")

@@ -3,6 +3,7 @@
 from .validation import ADDRESS_RE, format_token_amount, validate_address, validate_txid
 from .errors import ValidationError, UpstreamError
 from .logging_setup import setup_logging
+from .encoding import tron_b58_to_hex, tron_hex_to_b58, abi_encode_address, abi_encode_uint256, encode_trc20_transfer
 
 __all__ = [
     "ADDRESS_RE",
@@ -12,4 +13,9 @@ __all__ = [
     "ValidationError",
     "UpstreamError",
     "setup_logging",
+    "tron_b58_to_hex",
+    "tron_hex_to_b58",
+    "abi_encode_address",
+    "abi_encode_uint256",
+    "encode_trc20_transfer",
 ]

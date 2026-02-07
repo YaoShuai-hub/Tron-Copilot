@@ -4,7 +4,7 @@
 port = 8787
 
 # API endpoints (Nile testnet by default for hackathon demos)
-tronscan_base = "https://nileapi.tronscan.org"
+tronscan_base = "https://nileapi.tronscan.org/api"
 trongrid_base = "https://nile.trongrid.io"
 
 # TronGrid / TronScan API Keys (set via environment in production)

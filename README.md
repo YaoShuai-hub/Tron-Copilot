@@ -13,10 +13,17 @@
 | --- | --- | --- | --- |
 | `get_network_params` | 网络能量/带宽/建号费用等 | TRONGRID | 费用基线 |
 | `get_usdt_balance(address)` | TRC20 USDT 余额 | TRONSCAN | 可含 `_human_notes` |
+| `get_trx_balance(address)` | TRX 余额 | TRONGRID | 基础账户余额 |
 | `get_tx_status(txid)` | 交易确认 + 收据 | TRONGRID | 64 hex |
 | `get_recent_transactions(address, limit)` | 最近交易列表 | TRONGRID → TRONSCAN | 主备切换 |
 | `get_trc20_transfers(address, limit)` | 最近 TRC20 转账 | TRONGRID → TRONSCAN | 主备切换 |
 | `get_address_labels(address)` | 地址名称/标签/是否合约/是否屏蔽 | TRONSCAN | 标签查询 |
+| `create_unsigned_trx_transfer(from_address, to_address, amount_trx?, amount_sun?)` | 生成未签名 TRX 转账 | TRONGRID | 用户签名后广播 |
+| `create_unsigned_trc20_transfer(from_address, to_address, token_contract?, amount?, amount_raw?, decimals?)` | 生成未签名 TRC20 转账 | TRONGRID | 用户签名后广播 |
+| `agent_parse_intent(prompt)` | 解析自然语言意图 | 本地 | 启发式解析 |
+| `agent_prepare_transaction(prompt)` | 生成确认摘要 + 未签名交易 | TRONGRID | 多层流程 |
+| `agent_request_signature(unsigned_tx)` | 生成签名请求 | 本地 | 不保存私钥 |
+| `broadcast_signed_transaction(signed_tx)` | 广播已签名交易 | TRONGRID | 返回广播结果 |
 
 ## ⚡ 快速开始
 ```bash
@@ -56,7 +63,7 @@ curl -X POST http://localhost:8787/ \
 ## 🧪 测试网与主网
 开发与演示默认使用 Nile 测试网：
 - TronGrid Nile: https://nile.trongrid.io （无需 API key，QPS 50/单 IP）
-- TronScan Nile: https://nileapi.tronscan.org （无需 API key，QPS 50/单 IP）
+- TronScan Nile: https://nileapi.tronscan.org/api （无需 API key，QPS 50/单 IP）
 - 浏览器: https://nile.tronscan.org/
 - 水龙头: https://nileex.io/join/getJoinPage
 
@@ -69,7 +76,7 @@ export TRONSCAN_BASE=https://apilist.tronscanapi.com/api
 ## 🔧 配置 (config.toml / 环境变量)
 ```
 PORT
-TRONSCAN_BASE      (默认 https://nileapi.tronscan.org)
+TRONSCAN_BASE      (默认 https://nileapi.tronscan.org/api)
 TRONGRID_BASE      (默认 https://nile.trongrid.io)
 TRONSCAN_API_KEY   (TRC20/labels 备份查询)
 TRONGRID_API_KEY | TRON_PRO_API_KEY
@@ -96,6 +103,8 @@ SAFETY_ENABLE      (true/false，控制 _human_notes)
 - `tron_mcp/safety.py` — `_human_notes` 注释器。
 - `tron_mcp/settings.py` — 读取 config.toml + env。
 - `tron_mcp/ai/client.py` — LLM 客户端（OpenAI/DeepSeek/Anthropic 等）。
+- `tron_mcp/extensions/agent_pipeline.py` — 意图解析 → 确认 → 构建 → 签名请求 → 广播。
+- `tron_mcp/extensions/trc20_assistant.py` — TRC20 未签名转账构建。
 - `agents/agent_runner.py` — 彩色 CLI agent（推荐）。
 - `agents/ai_llm_tool_call.py` — 极简 LLM demo。
 - `agents/tui_app.py` — Textual TUI（可选）。
