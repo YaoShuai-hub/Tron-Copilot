@@ -3,14 +3,14 @@
 # Server port
 port = 8787
 
-# API endpoints
-tronscan_base = "https://apilist.tronscanapi.com/api"
-trongrid_base = "https://api.trongrid.io"
+# API endpoints (Nile testnet by default for hackathon demos)
+tronscan_base = "https://nileapi.tronscan.org"
+trongrid_base = "https://nile.trongrid.io"
 
 # TronGrid / TronScan API Keys (set via environment in production)
-# In repo we keep placeholders to avoid leaking secrets.
-tronscan_api_key = "<set-via-env>"
-trongrid_api_key = "<set-via-env>"
+# Keep empty in repo to avoid leaking secrets.
+tronscan_api_key = ""
+trongrid_api_key = ""
 
 
 # USDT contract (TRC20)
@@ -27,6 +27,6 @@ safety_enable = true      # add human-readable annotations to tool outputs
 
 # AI provider (optional, for LLM-driven tool orchestration)
 ai_api_base = "https://api.deepseek.com/v1"
-ai_api_key = "<set-via-env>"
+ai_api_key = "sk-1afd019acba54287856b9008e0347473"
 ai_model = "deepseek-chat"
 ai_provider = "openai"   # openai | azure-openai | anthropic | custom
