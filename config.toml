@@ -9,8 +9,8 @@ trongrid_base = "https://api.trongrid.io"
 
 # TronGrid / TronScan API Keys (set via environment in production)
 # In repo we keep placeholders to avoid leaking secrets.
-tronscan_api_key = "<key1>"
-trongrid_api_key = "<key2>"
+tronscan_api_key = "1722e8d8-b07a-44e7-8900-8e78db77d373"
+trongrid_api_key = "132598a9-92c3-49d0-8ef2-2abc42a92d25"
 
 
 # USDT contract (TRC20)
@@ -30,6 +30,6 @@ safety_enable = true      # add human-readable annotations to tool outputs
 
 # AI provider (optional, for LLM-driven tool orchestration)
 ai_api_base = "https://ark.cn-beijing.volces.com/api/v3"
-ai_api_key = "<your key>"
+ai_api_key = "c8fa0fe0-1e34-4f2e-b177-5faf1dea0100"
 ai_model = "doubao-seed-1-8-251228"
 ai_provider = "openai"   # openai | azure-openai | anthropic | custom
