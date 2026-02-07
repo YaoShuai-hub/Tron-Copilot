@@ -4,6 +4,8 @@
  * - get_usdt_balance  : TRONSCAN account lookup and USDT TRC20 balance extraction
  * - get_network_params: TRONGRID chain parameters (energy/bandwidth fees, etc.)
  * - get_tx_status     : TRONGRID transaction confirmation and receipt summary
+ * - get_token_balance : TRX/TRC20 balance by symbol/contract
+ * - get_total_value   : portfolio total value in USD/CNY (CoinGecko)
  *
  * Run:  npm start  (or: node server.js)
  * RPC:  POST JSON-RPC 2.0 requests to http://localhost:8787/
@@ -12,7 +14,7 @@
  * Notes:
  * - Requires outbound internet access to TRONSCAN/TRONGRID.
  * - Optional env vars: PORT, TRONSCAN_BASE, TRONGRID_BASE, TRONGRID_API_KEY,
- *   TRON_USDT_CONTRACT, REQUEST_TIMEOUT_MS.
+ *   TRON_USDT_CONTRACT, COINGECKO_BASE, REQUEST_TIMEOUT_MS.
  */
 
 const http = require("http");
@@ -27,6 +29,8 @@ const TRONGRID_API_KEY =
 const USDT_CONTRACT =
   process.env.TRON_USDT_CONTRACT ||
   "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"; // Official TRON USDT (TRC20)
+const COINGECKO_BASE =
+  process.env.COINGECKO_BASE || "https://api.coingecko.com/api/v3";
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 12000);
 
 const serverInfo = { name: "trident-mcp-node", version: "0.2.0" };
@@ -61,6 +65,32 @@ const toolDefinitions = [
       },
       required: ["txid"]
     }
+  },
+  {
+    name: "get_token_balance",
+    description:
+      "Fetch TRX/TRC20 balance by symbol or contract (TRONSCAN).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        address: { type: "string", description: "TRON base58 address (starts with T)" },
+        token: { type: "string", description: "Token symbol (e.g. USDT/TRX) or TRC20 contract address" }
+      },
+      required: ["address", "token"]
+    }
+  },
+  {
+    name: "get_total_value",
+    description:
+      "Calculate total value for all tokens (TRX + TRC20) in USD/CNY.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        address: { type: "string", description: "TRON base58 address (starts with T)" },
+        currency: { type: "string", description: "Fiat unit: usd or cny", enum: ["usd", "cny"] }
+      },
+      required: ["address"]
+    }
   }
 ];
 
@@ -82,6 +112,69 @@ function formatTokenAmount(rawStr, decimals = 6) {
   } catch {
     return "0";
   }
+}
+
+function getTrc20Candidates(account = {}) {
+  return (
+    account.trc20token_balances ||
+    account.trc20token_balancesV2 ||
+    account.trc20 ||
+    account.tokenBalances ||
+    []
+  );
+}
+
+function tokenContract(token = {}) {
+  return (
+    token.tokenId ||
+    token.contract_address ||
+    token.tokenAddress ||
+    token.token_id ||
+    token.tokenIdAddress ||
+    token.address ||
+    null
+  );
+}
+
+function tokenSymbol(token = {}) {
+  return (
+    token.tokenAbbr ||
+    token.symbol ||
+    token.tokenSymbol ||
+    token.tokenName ||
+    token.name ||
+    null
+  );
+}
+
+function tokenDecimals(token = {}, fallback = 6) {
+  return Number(token.tokenDecimal || token.decimals || token.tokenDecimals || fallback);
+}
+
+function tokenBalanceRaw(token = {}) {
+  const keys = ["balance", "amount", "tokenBalance", "quantity"];
+  for (const key of keys) {
+    const candidate = token[key];
+    if (candidate !== undefined && candidate !== null && candidate !== "" && candidate !== "0") {
+      return candidate.toString();
+    }
+  }
+  return "0";
+}
+
+function cleanContracts(contracts = []) {
+  const out = [];
+  const seen = new Set();
+  contracts.forEach((contract) => {
+    if (!contract) return;
+    const value = contract.toString().trim();
+    if (!value || value.includes(",") || value.includes(" ")) return;
+    if (!/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(value)) return;
+    if (seen.has(value)) return;
+    seen.add(value);
+    out.push(value);
+  });
+  return out;
 }
 
 async function fetchJson(url, options = {}) {
@@ -246,6 +339,177 @@ async function toolGetTxStatus({ txid }) {
   };
 }
 
+async function fetchTokenPrices(contracts = [], currency = "usd") {
+  if (!contracts.length) return {};
+  const contractParam = encodeURIComponent(contracts.join(","));
+  const url = `${COINGECKO_BASE}/simple/token_price/tron?contract_addresses=${contractParam}&vs_currencies=${currency}`;
+  return fetchJson(url);
+}
+
+async function fetchTrxPrice(currency = "usd") {
+  const url = `${COINGECKO_BASE}/simple/price?ids=tron&vs_currencies=${currency}`;
+  return fetchJson(url);
+}
+
+async function toolGetTokenBalance({ address, token }) {
+  if (!isLikelyBase58Address(address)) {
+    throw new Error("Invalid TRON address format");
+  }
+  if (!token) {
+    throw new Error("token is required");
+  }
+
+  const tokenKey = token.toString().trim();
+  const tokenUpper = tokenKey.toUpperCase();
+  const url = `${TRONSCAN_BASE}/account?address=${encodeURIComponent(address)}`;
+  const account = await fetchJson(url);
+
+  if (tokenUpper === "TRX" || tokenUpper === "TRON") {
+    const balanceRaw = (account.balance || account.balanceInSun || 0).toString();
+    const decimals = 6;
+    return {
+      address,
+      token: { symbol: "TRX", contract: null, decimals, name: "TRON", matchedBy: "native" },
+      balance: { raw: balanceRaw, human: formatTokenAmount(balanceRaw, decimals), decimals },
+      source: "TRONSCAN",
+      apiUrl: url,
+      updated: account.updateTime || account.date_updated || null
+    };
+  }
+
+  const candidates = getTrc20Candidates(account);
+  let matched = null;
+  let matchedBy = null;
+  for (const item of candidates) {
+    const contract = tokenContract(item);
+    const symbol = tokenSymbol(item);
+    if (contract && contract.toUpperCase() === tokenUpper) {
+      matched = item;
+      matchedBy = "contract";
+      break;
+    }
+    if (symbol && symbol.toUpperCase() === tokenUpper) {
+      matched = item;
+      matchedBy = "symbol";
+      break;
+    }
+  }
+
+  if (!matched) {
+    throw new Error(`Token not found for address: ${tokenKey}`);
+  }
+
+  const contract = tokenContract(matched);
+  const symbol = tokenSymbol(matched);
+  const decimals = tokenDecimals(matched);
+  const balanceRaw = tokenBalanceRaw(matched);
+
+  return {
+    address,
+    token: {
+      symbol: symbol || tokenUpper,
+      contract,
+      decimals,
+      name: matched.tokenName || matched.name || null,
+      matchedBy
+    },
+    balance: {
+      raw: balanceRaw,
+      human: formatTokenAmount(balanceRaw, decimals),
+      decimals
+    },
+    source: "TRONSCAN",
+    apiUrl: url,
+    updated: account.updateTime || account.date_updated || null
+  };
+}
+
+async function toolGetTotalValue({ address, currency = "usd" }) {
+  if (!isLikelyBase58Address(address)) {
+    throw new Error("Invalid TRON address format");
+  }
+  const fiat = (currency || "usd").toLowerCase();
+  if (fiat !== "usd" && fiat !== "cny") {
+    throw new Error("currency must be 'usd' or 'cny'");
+  }
+
+  const url = `${TRONSCAN_BASE}/account?address=${encodeURIComponent(address)}`;
+  const account = await fetchJson(url);
+  const items = [];
+
+  const trxRaw = (account.balance || account.balanceInSun || 0).toString();
+  const trxDecimals = 6;
+  items.push({
+    token: { symbol: "TRX", contract: null, decimals: trxDecimals, name: "TRON" },
+    balance: { raw: trxRaw, human: formatTokenAmount(trxRaw, trxDecimals), decimals: trxDecimals }
+  });
+
+  for (const item of getTrc20Candidates(account)) {
+    const contract = tokenContract(item);
+    const symbol = tokenSymbol(item);
+    const decimals = tokenDecimals(item);
+    const balanceRaw = tokenBalanceRaw(item);
+    items.push({
+      token: { symbol, contract, decimals, name: item.tokenName || item.name || null },
+      balance: { raw: balanceRaw, human: formatTokenAmount(balanceRaw, decimals), decimals }
+    });
+  }
+
+  const contracts = cleanContracts(items.map((i) => i.token.contract).filter(Boolean));
+  const priceMap = {};
+  const pricingErrors = [];
+  const chunkSize = 80;
+  for (let i = 0; i < contracts.length; i += chunkSize) {
+    const chunk = contracts.slice(i, i + chunkSize);
+    try {
+      const priceMapRaw = await fetchTokenPrices(chunk, fiat);
+      Object.entries(priceMapRaw || {}).forEach(([key, value]) => {
+        priceMap[key.toLowerCase()] = value;
+      });
+    } catch (err) {
+      pricingErrors.push(`CoinGecko chunk ${Math.floor(i / chunkSize) + 1}: ${err.message}`);
+    }
+  }
+  let trxPrice = null;
+  try {
+    const trxPriceRaw = await fetchTrxPrice(fiat);
+    trxPrice = trxPriceRaw?.tron ? trxPriceRaw.tron[fiat] : null;
+  } catch (err) {
+    pricingErrors.push(`CoinGecko TRX price: ${err.message}`);
+  }
+
+  let totalValue = 0;
+  const missingPrices = [];
+  items.forEach((item) => {
+    const contract = item.token.contract;
+    const symbol = item.token.symbol || contract || "UNKNOWN";
+    const price = contract ? priceMap[String(contract).toLowerCase()]?.[fiat] : trxPrice;
+    const amount = Number(item.balance.human);
+    if (!Number.isFinite(amount) || price === undefined || price === null) {
+      item.price = price ?? null;
+      item.value = null;
+      missingPrices.push(String(symbol));
+      return;
+    }
+    const value = amount * Number(price);
+    item.price = Number(price);
+    item.value = value.toString();
+    totalValue += value;
+  });
+
+  return {
+    address,
+    currency: fiat,
+    totalValue: totalValue.toString(),
+    items,
+    missingPrices,
+    pricingErrors,
+    pricingSource: "COINGECKO",
+    apiUrl: { account: url, prices: COINGECKO_BASE },
+    updated: account.updateTime || account.date_updated || null
+  };
+}
+
 async function dispatchTool(name, args = {}) {
   switch (name) {
     case "get_usdt_balance":
@@ -254,6 +518,10 @@ async function dispatchTool(name, args = {}) {
       return toolGetNetworkParams();
     case "get_tx_status":
       return toolGetTxStatus(args);
+    case "get_token_balance":
+      return toolGetTokenBalance(args);
+    case "get_total_value":
+      return toolGetTotalValue(args);
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
