@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 
 from . import settings
 from .extensions import tx_assistant, trc20_assistant, agent_pipeline, local_signer
-from .modules import chain_ops, funds_flow, notify_telegram
+from .modules import chain_ops, funds_flow, notify_telegram, bash_tool
 from .modules import audit_log, market_data, exchange_adapter
 from .utils.errors import ValidationError
 from .tron_api import (
@@ -154,6 +154,7 @@ def list_tools() -> Dict[str, Any]:
     tools.extend(chain_ops.TOOL_DEFINITIONS)
     tools.extend(funds_flow.TOOL_DEFINITIONS)
     tools.extend(notify_telegram.TOOL_DEFINITIONS)
+    tools.extend(bash_tool.TOOL_DEFINITIONS)
     tools.extend(audit_log.TOOL_DEFINITIONS)
     tools.extend(market_data.TOOL_DEFINITIONS)
     tools.extend(exchange_adapter.TOOL_DEFINITIONS)
@@ -712,6 +713,8 @@ def call_tool(name: str, args: Optional[Dict[str, Any]]) -> Any:
         return funds_flow.call_tool(name, args)
     if name in notify_telegram.TOOL_NAMES:
         return notify_telegram.call_tool(name, args)
+    if name in bash_tool.TOOL_NAMES:
+        return bash_tool.call_tool(name, args)
     if name in audit_log.TOOL_NAMES:
         return audit_log.call_tool(name, args)
     if name in market_data.TOOL_NAMES:

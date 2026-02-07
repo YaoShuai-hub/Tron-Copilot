@@ -49,6 +49,7 @@
 | `exchange_fetch_order(...)` | 交易所查单（CCXT） | REST | 任务模块 |
 | `get_token_balance(address, token)` | 任意币种余额（TRX/TRC20） | TRONSCAN | symbol/合约 |
 | `get_total_value(address, currency)` | 所有币种总价值 | TRONSCAN + CoinGecko | usd/cny |
+| `run_bash_command(command, cwd?, timeout_sec?, max_output_chars?)` | 执行本地 bash 指令 | 本地 | 仅限仓库内路径 |
 
 ## ⚡ 快速开始
 ```bash
