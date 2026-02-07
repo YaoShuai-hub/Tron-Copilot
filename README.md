@@ -25,6 +25,27 @@
 | `agent_request_signature(unsigned_tx)` | 生成签名请求 | 本地 | 不保存私钥 |
 | `sign_transaction(unsigned_tx, env_path?)` | 本地私钥签名 | 本地 | 读取 `.env.private` |
 | `broadcast_signed_transaction(signed_tx)` | 广播已签名交易 | TRONGRID | 返回广播结果 |
+| `chain_transfer_flow(...)` | 一站式转账（构建/签名/广播） | 混合 | 任务模块 |
+| `chain_tx_status(txid)` | 交易状态（带 from/to） | TRONGRID | 任务模块 |
+| `prepare_deposit_withdraw(...)` | 充值/提现规划 | 本地/链上 | 任务模块 |
+| `send_telegram(message, ...)` | Telegram 通知 | Telegram | 任务模块 |
+| `telegram_subscribe(chat_id?, label?)` | 订阅 Telegram | Telegram | 任务模块 |
+| `telegram_unsubscribe(chat_id?)` | 取消订阅 Telegram | Telegram | 任务模块 |
+| `telegram_list_subscribers()` | 查看订阅列表 | Telegram | 任务模块 |
+| `telegram_broadcast(message, ...)` | 向订阅者群发 | Telegram | 任务模块 |
+| `audit_log_event(event, path?)` | 写入审计日志 | 本地 | 任务模块 |
+| `audit_get_logs(limit?, path?)` | 读取审计日志 | 本地 | 任务模块 |
+| `audit_reconcile(txids, path?)` | 对账（查链上状态） | TRONGRID | 任务模块 |
+| `get_orderbook(symbol?, limit?, notify?, chat_id?, broadcast?)` | 盘口快照 | REST | 任务模块 |
+| `get_kline(symbol?, interval?, limit?, notify?, chat_id?, broadcast?)` | K线数据 | REST | 任务模块 |
+| `exchange_get_balance(...)` | 交易所余额（CCXT） | REST | 任务模块 |
+| `exchange_get_deposit_address(...)` | 交易所充值地址（CCXT） | REST | 任务模块 |
+| `exchange_withdraw(...)` | 交易所提现（CCXT） | REST | 任务模块 |
+| `exchange_fetch_withdrawals(...)` | 交易所提现记录（CCXT） | REST | 任务模块 |
+| `exchange_fetch_deposits(...)` | 交易所充值记录（CCXT） | REST | 任务模块 |
+| `exchange_create_order(...)` | 交易所下单（CCXT） | REST | 任务模块 |
+| `exchange_cancel_order(...)` | 交易所撤单（CCXT） | REST | 任务模块 |
+| `exchange_fetch_order(...)` | 交易所查单（CCXT） | REST | 任务模块 |
 | `get_token_balance(address, token)` | 任意币种余额（TRX/TRC20） | TRONSCAN | symbol/合约 |
 | `get_total_value(address, currency)` | 所有币种总价值 | TRONSCAN + CoinGecko | usd/cny |
 
@@ -63,6 +84,11 @@ curl -X POST http://localhost:8787/ \
   -d '{"jsonrpc":"2.0","id":1,"method":"list_tools"}'
 ```
 
+交易所适配工具（CCXT）需要额外安装：
+```bash
+pip3 install ccxt
+```
+
 ## 🧪 测试网与主网
 开发与演示默认使用 Nile 测试网：
 - TronGrid Nile: https://nile.trongrid.io （无需 API key，QPS 50/单 IP）
@@ -89,6 +115,17 @@ REQUEST_TIMEOUT_MS
 LOG_LEVEL, LOG_FILE
 AI_API_BASE, AI_API_KEY, AI_MODEL, AI_PROVIDER  # 可选，启用 LLM 编排
 SAFETY_ENABLE      (true/false，控制 _human_notes)
+TELEGRAM_BOT_TOKEN (可选)
+TELEGRAM_CHAT_ID   (可选)
+TELEGRAM_SUBSCRIBERS_PATH (可选，默认 logs/telegram_subscribers.json)
+AUDIT_LOG_DIR      (可选，默认 logs/transactions)
+MARKET_DATA_BASE   (可选，默认 https://api.binance.com)
+EXCHANGE_ID        (可选)
+EXCHANGE_API_KEY   (可选)
+EXCHANGE_SECRET    (可选)
+EXCHANGE_PASSWORD  (可选)
+EXCHANGE_API_DOMAIN (可选，binance 域名替换，如 api1.binance.com)
+EXCHANGE_PROXY      (可选，HTTP/SOCKS 代理，如 http://127.0.0.1:7890 或 socks5://127.0.0.1:1080)
 ```
 👉 建议把真实 key 放 `.env`（已在 `.gitignore`），示例见 `.env.example`。
 
@@ -141,3 +178,4 @@ python3 -c "from tron_mcp.extensions.local_signer import sign_transaction; print
 - 400/401：检查 TRONSCAN/TRONGRID API key 是否有效或控制台是否限制来源。
 - 没有 `_human_notes`：确认 `SAFETY_ENABLE` 未被设为 false。
 - LLM 405/超时：加 `--debug` 看往返；必要时依赖本地 fallback（工具结果仍会显示）。
+审计日志结构说明见 `AUDIT_SCHEMA.md`。

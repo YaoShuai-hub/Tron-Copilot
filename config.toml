@@ -33,3 +33,22 @@ ai_api_base = "https://ark.cn-beijing.volces.com/api/v3"
 ai_api_key = "<set-via-env>"
 ai_model = "doubao-seed-1-8-251228"
 ai_provider = "openai"   # openai | azure-openai | anthropic | custom
+
+# Telegram (optional)
+telegram_bot_token = ""
+telegram_chat_id = ""
+telegram_subscribers_path = "logs/telegram_subscribers.json"
+
+# Audit log directory
+audit_log_dir = "logs/transactions"
+
+# Market data base (public REST)
+market_data_base = "https://data-api.binance.vision"
+
+# Exchange (optional, via CCXT)
+exchange_id = ""
+exchange_api_key = ""
+exchange_secret = ""
+exchange_password = ""
+exchange_api_domain = ""
+exchange_proxy = ""

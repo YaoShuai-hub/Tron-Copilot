@@ -42,6 +42,7 @@ from fastmcp import FastMCP
 
 from tron_mcp import safety, settings, tools
 from tron_mcp.extensions import tx_assistant, trc20_assistant, agent_pipeline, local_signer
+from tron_mcp.modules import chain_ops, funds_flow, notify_telegram, audit_log, market_data, exchange_adapter
 from tron_mcp.utils.logging_setup import setup_logging
 
 
@@ -158,6 +159,12 @@ tx_assistant.register_mcp_tools(mcp)
 trc20_assistant.register_mcp_tools(mcp)
 agent_pipeline.register_mcp_tools(mcp)
 local_signer.register_mcp_tools(mcp)
+chain_ops.register_mcp_tools(mcp)
+funds_flow.register_mcp_tools(mcp)
+notify_telegram.register_mcp_tools(mcp)
+audit_log.register_mcp_tools(mcp)
+market_data.register_mcp_tools(mcp)
+exchange_adapter.register_mcp_tools(mcp)
 
 
 @mcp.tool(name="get_token_balance", description="Fetch TRX/TRC20 balance by symbol or contract (TRONSCAN).")
