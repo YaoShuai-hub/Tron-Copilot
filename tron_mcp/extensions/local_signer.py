@@ -18,7 +18,7 @@ from tron_mcp.utils.errors import ValidationError
 TOOL_DEFINITIONS: List[Dict[str, Any]] = [
     {
         "name": "sign_transaction",
-        "description": "Sign an unsigned transaction using local TRON_PRIVATE_KEY (.env.private).",
+        "description": "Local-only: sign unsigned tx using TRON_PRIVATE_KEY from .env.private.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -87,6 +87,9 @@ def call_tool(name: str, args: Optional[Dict[str, Any]]) -> Any:
 
 
 def register_mcp_tools(mcp: Any) -> None:
-    @mcp.tool(name="sign_transaction", description="Sign an unsigned transaction using local TRON_PRIVATE_KEY.")
+    @mcp.tool(
+        name="sign_transaction",
+        description="Local-only: sign unsigned tx using TRON_PRIVATE_KEY from .env.private.",
+    )
     def tool_sign_transaction(unsigned_tx: dict, env_path: str | None = None) -> dict:
         return safety.enrich(sign_transaction(unsigned_tx=unsigned_tx, env_path=env_path))

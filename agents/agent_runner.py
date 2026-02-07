@@ -21,7 +21,7 @@ import argparse
 import json
 import logging
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from tron_mcp import tools
 from tron_mcp.ai import call_chat
@@ -168,12 +168,23 @@ def exec_tool_call(name: str, arguments_json: str) -> Dict[str, Any]:
         return {"error": f"Tool execution failed: {err}"}
 
 
-def agent_chat(user_prompt: str, max_rounds: int = 999, debug: bool = False) -> Dict[str, Any]:
+def agent_chat(
+    user_prompt: Optional[str] = None,
+    messages: Optional[List[Dict[str, Any]]] = None,
+    max_rounds: int = 999,
+    debug: bool = False,
+) -> Dict[str, Any]:
     """Run a tool-enabled chat loop; continue until no tool calls or safety cap."""
     tool_schema = tools.list_tools()["tools"]
-    messages: List[Dict[str, str]] = [{"role": "user", "content": user_prompt}]
+    if messages is None:
+        if not user_prompt:
+            raise ValidationError("user_prompt is required when messages is not provided")
+        messages = [{"role": "user", "content": user_prompt}]
+    elif user_prompt:
+        messages.append({"role": "user", "content": user_prompt})
 
     trace: List[Dict[str, Any]] = []
+    last_tool_results: List[Dict[str, Any]] = []
 
     last_tool_panel: Panel | None = None
 
@@ -190,9 +201,18 @@ def agent_chat(user_prompt: str, max_rounds: int = 999, debug: bool = False) -> 
         except UpstreamError as err:
             return {
                 "trace": trace,
-                "final": {"role": "assistant", "content": f"LLM error: {err}"},
+                "final": {
+                    "role": "assistant",
+                    "content": (
+                        f"LLM error: {err}"
+                        + (f". Raw tool results: {json.dumps(last_tool_results, ensure_ascii=False)}"
+                           if last_tool_results
+                           else "")
+                    ),
+                },
                 "tree": tree,
                 "last_tool_panel": last_tool_panel,
+                "messages": messages,
             }
         if debug:
             console.print("[dim]<< LLM raw response:[/]")
@@ -208,7 +228,7 @@ def agent_chat(user_prompt: str, max_rounds: int = 999, debug: bool = False) -> 
             round_node.add(f"[cyan]{message.get('content')}")
 
         if not tool_calls:
-            return {"trace": trace, "final": message, "tree": tree, "last_tool_panel": last_tool_panel}
+            return {"trace": trace, "final": message, "tree": tree, "last_tool_panel": last_tool_panel, "messages": messages}
 
         tool_results: List[Dict[str, Any]] = []
         # Execute tool calls and append their outputs.
@@ -251,50 +271,14 @@ def agent_chat(user_prompt: str, max_rounds: int = 999, debug: bool = False) -> 
                 }
             )
 
-        # Let LLM produce final natural-language answer (no further tool calls)
-        try:
-            follow_resp = call_chat(messages, tools_schema=None)
-            if debug:
-                console.print("[dim]<< LLM follow-up response:[/]")
-                console.print_json(data=follow_resp)
-            trace.append({"round": f"{round_idx}-finalize", "response": follow_resp})
-            final_msg = follow_resp.get("choices", [{}])[0].get("message", {})
-            return {"trace": trace, "final": final_msg, "tree": tree, "last_tool_panel": last_tool_panel}
-        except UpstreamError as err:
-            # DeepSeek may reject follow-up calls with 4xx. Try a simplified one-shot summary message.
-            simple_messages = [
-                {
-                    "role": "system",
-                    "content": "You are a concise assistant. Summarize provided tool results for the user. Do not call tools.",
-                },
-                {
-                    "role": "user",
-                    "content": "Summarize the following tool results in natural language:\n" + json.dumps(tool_results, ensure_ascii=False),
-                },
-            ]
-            try:
-                simple_resp = call_chat(simple_messages, tools_schema=None)
-                if debug:
-                    console.print("[dim]<< LLM simple summary response:[/]")
-                    console.print_json(data=simple_resp)
-                trace.append({"round": f"{round_idx}-simple", "response": simple_resp})
-                final_msg = simple_resp.get("choices", [{}])[0].get("message", {})
-                return {"trace": trace, "final": final_msg, "tree": tree, "last_tool_panel": last_tool_panel}
-            except UpstreamError as err2:
-                return {
-                    "trace": trace,
-                    "final": {
-                        "role": "assistant",
-                        "content": f"LLM finalize error: {err2}. Raw tool results: {json.dumps(tool_results, ensure_ascii=False)}",
-                    },
-                    "tree": tree,
-                    "last_tool_panel": last_tool_panel,
-                }
+        last_tool_results = tool_results
+        # Continue loop so the model can decide to call more tools or stop.
     return {
         "trace": trace,
         "final": {"role": "assistant", "content": "Stopped after safety cap."},
         "tree": tree,
         "last_tool_panel": last_tool_panel,
+        "messages": messages,
     }
 
 
@@ -318,21 +302,34 @@ def main() -> int:
     setup_logging(level="INFO", logfile=args.log_file, console=False)
     show_intro(args.log_file)
 
-    def run_once(prompt: str) -> None:
+    def run_once(prompt: str, messages: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
         # Echo user input in a panel; status spinner will clear automatically
         console.print(Panel(prompt, title="[magenta]You[/]", border_style="magenta", expand=True))
         with console.status("[cyan]Sending...", spinner="dots"):
             try:
-                result = agent_chat(prompt, max_rounds=args.rounds, debug=args.debug)
+                result = agent_chat(prompt, messages=messages, max_rounds=args.rounds, debug=args.debug)
             except (UpstreamError, ValidationError, Exception) as err:
-                console.print(f"[bold yellow][LLM fallback][/]: {err}")
+                raw_body = getattr(err, "body", None)
+                console.print("[bold yellow][LLM raw response][/]:")
+                if raw_body:
+                    try:
+                        console.print_json(data=json.loads(raw_body))
+                    except Exception:
+                        console.print(raw_body)
+                else:
+                    console.print("[dim]No raw response (timeout/network error).[/]")
                 fb = heuristic_fallback(prompt)
                 if fb:
                     console.print(f"[green]✔ Fallback tool[/] {fb.get('tool')}:")
                     console.print_json(data=fb.get("result"))
                 else:
-                    console.print("[red]No fallback matched this prompt.[/]")
-                return
+                    console.print(
+                        "[red]No heuristic fallback matched this prompt. "
+                        "Try a more explicit request (include address + amount), "
+                        "or call a tool directly (e.g., get_trx_balance, get_total_value, "
+                        "create_unsigned_trx_transfer).[/]"
+                    )
+                return messages or []
 
         # Pretty, terminal-friendly output (compact)
         console.print("")
@@ -350,6 +347,7 @@ def main() -> int:
         else:
             console.print_json(data=result.get("final"))
         console.print(f"\n[dim]Logs written to: {args.log_file}[/]")
+        return result.get("messages", messages or [])
 
     if args.prompt:
         run_once(args.prompt)
@@ -357,6 +355,7 @@ def main() -> int:
 
     # Interactive REPL mode
     try:
+        conversation_messages: List[Dict[str, Any]] = []
         while True:
             user_prompt = get_user_input()
             if user_prompt.strip().lower() in {"exit", "quit"}:
@@ -366,7 +365,7 @@ def main() -> int:
             # In fallback mode (no prompt_toolkit) clear the raw echo line
             if not PROMPT_TOOLKIT_AVAILABLE:
                 console.print("\033[F\033[K", end="")
-            run_once(user_prompt)
+            conversation_messages = run_once(user_prompt, messages=conversation_messages)
     except KeyboardInterrupt:
         console.print("\n[dim]Session ended by user.[/]")
     return 0

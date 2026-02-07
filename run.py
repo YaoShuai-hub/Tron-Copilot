@@ -51,7 +51,7 @@ mcp = FastMCP(
 )
 
 
-@mcp.tool(name="get_usdt_balance", description="Fetch TRC20 USDT balance for an address (TRONSCAN).")
+@mcp.tool(name="get_usdt_balance", description="Read-only: get TRC20 USDT balance for a TRON address (TRONSCAN).")
 def tool_get_usdt_balance(address: str) -> dict:
     """USDT balance breakdown for a TRON address.
 
@@ -67,7 +67,7 @@ def tool_get_usdt_balance(address: str) -> dict:
     return safety.enrich(tools.get_usdt_balance(address))
 
 
-@mcp.tool(name="get_trx_balance", description="Fetch TRX balance for an address (TRONGRID).")
+@mcp.tool(name="get_trx_balance", description="Read-only: get TRX balance for a TRON address (TRONGRID).")
 def tool_get_trx_balance(address: str) -> dict:
     """TRX balance for a TRON address.
 
@@ -78,7 +78,7 @@ def tool_get_trx_balance(address: str) -> dict:
     """
     return safety.enrich(tools.get_trx_balance(address))
 
-@mcp.tool(name="get_network_params", description="Get current TRON chain parameters (TRONGRID).")
+@mcp.tool(name="get_network_params", description="Read-only: get chain fee parameters (energy/bandwidth/create account).")
 def tool_get_network_params() -> dict:
     """Current TRON chain parameters.
 
@@ -93,7 +93,7 @@ def tool_get_network_params() -> dict:
     return safety.enrich(tools.get_network_params())
 
 
-@mcp.tool(name="get_tx_status", description="Check TRON transaction confirmation status and receipt summary.")
+@mcp.tool(name="get_tx_status", description="Read-only: get TRON tx confirmation + receipt summary by txid (hex).")
 def tool_get_tx_status(txid: str) -> dict:
     """Transaction confirmation status and receipt summary.
 
@@ -108,7 +108,7 @@ def tool_get_tx_status(txid: str) -> dict:
     return safety.enrich(tools.get_tx_status(txid))
 
 
-@mcp.tool(name="get_recent_transactions", description="List recent transactions for an address (TRONGRID→TRONSCAN fallback).")
+@mcp.tool(name="get_recent_transactions", description="Read-only: list recent TRX transactions for an address (TRONGRID→TRONSCAN).")
 def tool_get_recent_transactions(address: str, limit: int = 20) -> dict:
     """Recent transactions for a TRON address (concise list).
 
@@ -124,7 +124,7 @@ def tool_get_recent_transactions(address: str, limit: int = 20) -> dict:
     return safety.enrich(tools.get_recent_transactions(address, limit))
 
 
-@mcp.tool(name="get_trc20_transfers", description="List recent TRC20 transfers for an address (TRONGRID→TRONSCAN fallback).")
+@mcp.tool(name="get_trc20_transfers", description="Read-only: list recent TRC20 transfers for an address (TRONGRID→TRONSCAN).")
 def tool_get_trc20_transfers(address: str, limit: int = 20) -> dict:
     """Recent TRC20 transfers related to an address.
 
@@ -140,7 +140,7 @@ def tool_get_trc20_transfers(address: str, limit: int = 20) -> dict:
     return safety.enrich(tools.get_trc20_transfers(address, limit))
 
 
-@mcp.tool(name="get_address_labels", description="Get labels/tags and basic flags for an address (TRONSCAN).")
+@mcp.tool(name="get_address_labels", description="Read-only: lookup address labels/tags/flags (TRONSCAN).")
 def tool_get_address_labels(address: str) -> dict:
     """Address labels/flags from TRONSCAN account payload.
 
@@ -160,7 +160,7 @@ agent_pipeline.register_mcp_tools(mcp)
 local_signer.register_mcp_tools(mcp)
 
 
-@mcp.tool(name="get_token_balance", description="Fetch TRX/TRC20 balance by symbol or contract (TRONSCAN).")
+@mcp.tool(name="get_token_balance", description="Read-only: get TRX or TRC20 balance by symbol/contract (TRONSCAN).")
 def tool_get_token_balance(address: str, token: str) -> dict:
     """Token balance for a TRON address.
 
@@ -176,7 +176,7 @@ def tool_get_token_balance(address: str, token: str) -> dict:
     return safety.enrich(tools.get_token_balance(address, token))
 
 
-@mcp.tool(name="get_total_value", description="Compute total value (TRX+TRC20) in USD/CNY.")
+@mcp.tool(name="get_total_value", description="Read-only: compute total value (TRX+TRC20) in usd/cny with pricing.")
 def tool_get_total_value(address: str, currency: str = "usd") -> dict:
     """Total portfolio value in USD/CNY using CoinGecko pricing.
 

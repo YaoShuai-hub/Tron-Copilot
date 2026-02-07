@@ -15,7 +15,7 @@ from tron_mcp.utils.errors import ValidationError
 TOOL_DEFINITIONS: List[Dict[str, Any]] = [
     {
         "name": "create_unsigned_trc20_transfer",
-        "description": "Create an unsigned TRC20 transfer transaction (TRONGRID).",
+        "description": "Build unsigned TRC20 transfer (manual sign + broadcast required).",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -116,7 +116,7 @@ def call_tool(name: str, args: Optional[Dict[str, Any]]) -> Any:
 def register_mcp_tools(mcp: Any) -> None:
     @mcp.tool(
         name="create_unsigned_trc20_transfer",
-        description="Create an unsigned TRC20 transfer transaction (TRONGRID).",
+        description="Build unsigned TRC20 transfer (manual sign + broadcast required).",
     )
     def tool_create_unsigned_trc20_transfer(
         from_address: str,

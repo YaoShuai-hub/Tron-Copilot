@@ -25,6 +25,7 @@
 | `agent_request_signature(unsigned_tx)` | 生成签名请求 | 本地 | 不保存私钥 |
 | `sign_transaction(unsigned_tx, env_path?)` | 本地私钥签名 | 本地 | 读取 `.env.private` |
 | `broadcast_signed_transaction(signed_tx)` | 广播已签名交易 | TRONGRID | 返回广播结果 |
+| `transfer_trx_local_sign_broadcast(from_address, to_address, amount_trx?, amount_sun?, env_path?)` | TRX 转账（本地签名 + 广播） | TRONGRID | 读取 `.env.private` |
 | `get_token_balance(address, token)` | 任意币种余额（TRX/TRC20） | TRONSCAN | symbol/合约 |
 | `get_total_value(address, currency)` | 所有币种总价值 | TRONSCAN + CoinGecko | usd/cny |
 
