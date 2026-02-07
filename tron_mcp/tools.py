@@ -7,7 +7,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, List, Optional
 
 from . import settings
-from .extensions import tx_assistant, trc20_assistant, agent_pipeline
+from .extensions import tx_assistant, trc20_assistant, agent_pipeline, local_signer
 from .utils.errors import ValidationError
 from .tron_api import (
     fetch_account,
@@ -148,6 +148,7 @@ def list_tools() -> Dict[str, Any]:
     tools.extend(tx_assistant.TOOL_DEFINITIONS)
     tools.extend(trc20_assistant.TOOL_DEFINITIONS)
     tools.extend(agent_pipeline.TOOL_DEFINITIONS)
+    tools.extend(local_signer.TOOL_DEFINITIONS)
     return {"tools": tools}
 
 
@@ -695,6 +696,8 @@ def call_tool(name: str, args: Optional[Dict[str, Any]]) -> Any:
         return trc20_assistant.call_tool(name, args)
     if name in agent_pipeline.TOOL_NAMES:
         return agent_pipeline.call_tool(name, args)
+    if name in local_signer.TOOL_NAMES:
+        return local_signer.call_tool(name, args)
     if name == "get_token_balance":
         return get_token_balance(address=args.get("address"), token=args.get("token"))
     if name == "get_total_value":

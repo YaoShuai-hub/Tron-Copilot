@@ -23,6 +23,7 @@
 | `agent_parse_intent(prompt)` | 解析自然语言意图 | 本地 | 启发式解析 |
 | `agent_prepare_transaction(prompt)` | 生成确认摘要 + 未签名交易 | TRONGRID | 多层流程 |
 | `agent_request_signature(unsigned_tx)` | 生成签名请求 | 本地 | 不保存私钥 |
+| `sign_transaction(unsigned_tx, env_path?)` | 本地私钥签名 | 本地 | 读取 `.env.private` |
 | `broadcast_signed_transaction(signed_tx)` | 广播已签名交易 | TRONGRID | 返回广播结果 |
 | `get_token_balance(address, token)` | 任意币种余额（TRX/TRC20） | TRONSCAN | symbol/合约 |
 | `get_total_value(address, currency)` | 所有币种总价值 | TRONSCAN + CoinGecko | usd/cny |
@@ -111,7 +112,6 @@ SAFETY_ENABLE      (true/false，控制 _human_notes)
 - `agents/agent_runner.py` — 彩色 CLI agent（推荐）。
 - `agents/ai_llm_tool_call.py` — 极简 LLM demo。
 - `agents/tui_app.py` — Textual TUI（可选）。
-- `tool_smoke.py` — 快速烟测脚本。
 
 ## 💬 常用提示 (REPL / agent_runner 可直接粘贴)
 - Q1: Show me the current TRON network energy fee and bandwidth fee.

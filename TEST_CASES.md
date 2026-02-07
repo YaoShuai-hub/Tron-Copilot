@@ -117,6 +117,74 @@ Broadcast signed transaction (requires signed tx):
 python3 -c "from tron_mcp.extensions.agent_pipeline import broadcast_signed; print(broadcast_signed({'txID':'...','signature':['...'],'raw_data':{...}}))"
 ```
 
+## 4.1) Full TRX Transfer Flow (Generate → Sign → Broadcast → Confirm)
+
+```bash
+cd /home/henry/Documents/ctf/blockchain/program/HK_hacker_26/trident-mcp
+
+# 1) Generate unsigned transaction
+python3 - <<'PY'
+import json
+from tron_mcp.extensions.tx_assistant import create_unsigned_trx_transfer
+
+from_addr = "TUe5xktiJcM4fMzR9yGet3jma5BJoT43jH"
+to_addr = "TM7S769qMobxfuvN73ASpyuwZUQS29JZmC"
+
+tx = create_unsigned_trx_transfer(from_addr, to_addr, amount_trx="1.25")
+with open("unsigned_tx.json", "w") as f:
+    json.dump(tx["unsignedTx"], f, ensure_ascii=False, indent=2)
+print("new txid:", tx["txid"])
+PY
+
+# 2) Sign (reads TRON_PRIVATE_KEY from .env.private)
+python3 - <<'PY'
+import json
+from tron_mcp.extensions.local_signer import sign_transaction
+
+with open("unsigned_tx.json", "r") as f:
+    unsigned = json.load(f)
+
+signed = sign_transaction(unsigned)
+with open("signed_tx.json", "w") as f:
+    json.dump(signed["signed_tx"], f, ensure_ascii=False, indent=2)
+print("signed txid:", signed["txid"])
+PY
+
+# 3) Broadcast signed transaction
+python3 - <<'PY'
+import json
+from tron_mcp.extensions.agent_pipeline import broadcast_signed
+with open("signed_tx.json", "r") as f:
+    signed_tx = json.load(f)
+print(broadcast_signed(signed_tx))
+PY
+
+# 4) Confirm transaction (replace with returned txid)
+python3 -c "from tron_mcp import tools; print(tools.get_tx_status('YOUR_TXID'))"
+```
+
+## 4.2) Full TRX Transfer Flow (No Files, In-Memory Signing)
+
+```bash
+cd /home/henry/Documents/ctf/blockchain/program/HK_hacker_26/trident-mcp
+
+python3 - <<'PY'
+from tron_mcp.extensions.tx_assistant import create_unsigned_trx_transfer
+from tron_mcp.extensions.local_signer import sign_transaction
+from tron_mcp.extensions.agent_pipeline import broadcast_signed
+
+from_addr = "TUe5xktiJcM4fMzR9yGet3jma5BJoT43jH"
+to_addr = "TM7S769qMobxfuvN73ASpyuwZUQS29JZmC"
+
+unsigned = create_unsigned_trx_transfer(from_addr, to_addr, amount_trx="1.25")
+signed = sign_transaction(unsigned["unsignedTx"])
+print("signed txid:", signed["txid"])
+
+result = broadcast_signed(signed["signed_tx"])
+print("broadcast:", result)
+PY
+```
+
 ## 5) MCP JSON-RPC Example
 
 ```bash

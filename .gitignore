@@ -6,5 +6,6 @@ __pycache__/
 logs/
 .env
 .env.local
+.env.private
 .DS_Store
 node_modules/

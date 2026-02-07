@@ -41,7 +41,7 @@ import sys
 from fastmcp import FastMCP
 
 from tron_mcp import safety, settings, tools
-from tron_mcp.extensions import tx_assistant, trc20_assistant, agent_pipeline
+from tron_mcp.extensions import tx_assistant, trc20_assistant, agent_pipeline, local_signer
 from tron_mcp.utils.logging_setup import setup_logging
 
 
@@ -157,6 +157,7 @@ def tool_get_address_labels(address: str) -> dict:
 tx_assistant.register_mcp_tools(mcp)
 trc20_assistant.register_mcp_tools(mcp)
 agent_pipeline.register_mcp_tools(mcp)
+local_signer.register_mcp_tools(mcp)
 
 
 @mcp.tool(name="get_token_balance", description="Fetch TRX/TRC20 balance by symbol or contract (TRONSCAN).")
