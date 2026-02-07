@@ -55,6 +55,24 @@ def heuristic_fallback(prompt: str) -> Dict[str, Any] | None:
     addr = addr_match.group(1) if addr_match else None
 
     p = prompt.lower()
+    wants_total_value = any(
+        phrase in p
+        for phrase in (
+            "total value",
+            "portfolio",
+            "总价值",
+            "总价",
+            "所有币",
+            "总资产",
+            "总资产价值",
+            "总市值",
+        )
+    )
+    currency = "usd"
+    if "cny" in p or "rmb" in p or "人民币" in prompt:
+        currency = "cny"
+    elif "usd" in p or "美元" in prompt or "美金" in prompt:
+        currency = "usd"
     try:
         if "trc20" in p or "transfer" in p:
             if addr:
@@ -64,6 +82,8 @@ def heuristic_fallback(prompt: str) -> Dict[str, Any] | None:
                 return {"tool": "get_recent_transactions", "result": tools.get_recent_transactions(addr, limit=5)}
         if txid_match:
             return {"tool": "get_tx_status", "result": tools.get_tx_status(txid_match.group(0))}
+        if wants_total_value and addr:
+            return {"tool": "get_total_value", "result": tools.get_total_value(addr, currency=currency)}
         if "balance" in p and addr:
             return {"tool": "get_usdt_balance", "result": tools.get_usdt_balance(addr)}
         if "network" in p:

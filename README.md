@@ -24,6 +24,8 @@
 | `agent_prepare_transaction(prompt)` | 生成确认摘要 + 未签名交易 | TRONGRID | 多层流程 |
 | `agent_request_signature(unsigned_tx)` | 生成签名请求 | 本地 | 不保存私钥 |
 | `broadcast_signed_transaction(signed_tx)` | 广播已签名交易 | TRONGRID | 返回广播结果 |
+| `get_token_balance(address, token)` | 任意币种余额（TRX/TRC20） | TRONSCAN | symbol/合约 |
+| `get_total_value(address, currency)` | 所有币种总价值 | TRONSCAN + CoinGecko | usd/cny |
 
 ## ⚡ 快速开始
 ```bash
@@ -81,6 +83,7 @@ TRONGRID_BASE      (默认 https://nile.trongrid.io)
 TRONSCAN_API_KEY   (TRC20/labels 备份查询)
 TRONGRID_API_KEY | TRON_PRO_API_KEY
 TRON_USDT_CONTRACT (默认 TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t)
+COINGECKO_BASE     (默认 https://api.coingecko.com/api/v3)
 REQUEST_TIMEOUT_MS
 LOG_LEVEL, LOG_FILE
 AI_API_BASE, AI_API_KEY, AI_MODEL, AI_PROVIDER  # 可选，启用 LLM 编排

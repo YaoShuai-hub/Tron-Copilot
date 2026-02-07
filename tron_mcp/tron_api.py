@@ -7,6 +7,7 @@ import logging
 from typing import Any, Dict, Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+from urllib.parse import quote
 
 from . import settings
 from .utils.errors import UpstreamError
@@ -193,3 +194,23 @@ def broadcast_transaction(signed_tx: Dict[str, Any]) -> Dict[str, Any]:
     """Broadcast a signed transaction to the network (TRONGRID)."""
     url = f"{settings.SETTINGS.trongrid_base}/wallet/broadcasttransaction"
     return fetch_json(url, method="POST", body=signed_tx)
+
+
+# --- Pricing (CoinGecko) ----------------------------------------------------
+
+def fetch_tron_token_prices(contracts: list[str], vs_currency: str) -> Dict[str, Any]:
+    """Fetch TRC20 token prices by contract address on TRON (CoinGecko)."""
+    if not contracts:
+        return {}
+    contract_param = quote(",".join(contracts))
+    url = (
+        f"{settings.SETTINGS.coingecko_base}/simple/token_price/tron"
+        f"?contract_addresses={contract_param}&vs_currencies={vs_currency}"
+    )
+    return fetch_json(url)
+
+
+def fetch_trx_price(vs_currency: str) -> Dict[str, Any]:
+    """Fetch TRX price (CoinGecko)."""
+    url = f"{settings.SETTINGS.coingecko_base}/simple/price?ids=tron&vs_currencies={vs_currency}"
+    return fetch_json(url)
