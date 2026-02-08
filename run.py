@@ -283,8 +283,6 @@ def main() -> int:
         mcp.run()
     except KeyboardInterrupt:
         # Graceful shutdown instead of noisy traceback
-        import logging
-
         logging.getLogger(__name__).info("Shutting down (KeyboardInterrupt)")
         return 0
     return 0

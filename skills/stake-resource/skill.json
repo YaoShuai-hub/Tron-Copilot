@@ -1,0 +1,31 @@
+{
+    "name": "stake-resource",
+    "description": "Stake TRX to obtain energy or bandwidth resources",
+    "version": "1.0.0",
+    "scripts": {
+        "build_stake": "python scripts/build_stake.py",
+        "build_unstake": "python scripts/build_unstake.py"
+    },
+    "parameters": {
+        "amount": {
+            "type": "number",
+            "description": "Amount of TRX to stake/unstake",
+            "required": true
+        },
+        "resource": {
+            "type": "string",
+            "description": "Resource type: ENERGY or BANDWIDTH",
+            "default": "ENERGY"
+        },
+        "from_address": {
+            "type": "string",
+            "description": "Sender wallet address",
+            "required": true
+        },
+        "network": {
+            "type": "string",
+            "description": "Network: mainnet, nile, or shasta",
+            "default": "nile"
+        }
+    }
+}

@@ -1,0 +1,7 @@
+{
+    "created_at": "2026-02-08T04:15:10+08:00",
+    "generated": true,
+    "version": "1.0.0",
+    "user_request": "向10个地址批量转账TRX或TRC20代币",
+    "complexity": "Medium"
+}

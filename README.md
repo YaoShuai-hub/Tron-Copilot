@@ -20,6 +20,7 @@
 | `get_recent_transactions(address, limit)` | 最近交易列表 | TRONGRID → TRONSCAN | 主备切换 |
 | `get_trc20_transfers(address, limit)` | 最近 TRC20 转账 | TRONGRID → TRONSCAN | 主备切换 |
 | `get_address_labels(address)` | 地址名称/标签/是否合约/是否屏蔽 | TRONSCAN | 标签查询 |
+| `get_transactions_between_addresses(address_a, address_b, start_ts_ms, end_ts_ms?, limit?, max_pages?)` | 查询两个地址之间的交易记录 | TRONGRID → TRONSCAN | 时间范围筛选 |
 
 ### 2) TRON 交易构建/签名
 | 工具 | 作用 | 数据源 | 备注 |
@@ -118,6 +119,14 @@ pip3 install -r requirements.txt
 ```bash
 python3 run.py
 ```
+
+运行 Copilot 前端 API（FastAPI）：
+```bash
+python3 frontend_server.py
+```
+
+默认监听 `http://localhost:8000`，可用 `BC_COPILOT_HOST` 和 `BC_COPILOT_PORT` 覆盖。
+服务代码已并入当前仓库的 `src/`、`skills/` 与 `personal-skills/`，无需依赖旧的 `BlockChain-Copilot` 目录。
 
 彩色 CLI Agent（自动多轮工具调用）：
 ```bash

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, asdict
 from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, List, Optional
+import time
 
 from . import settings
 from .extensions import tx_assistant, trc20_assistant, agent_pipeline, local_signer
@@ -143,6 +144,22 @@ TOOL_DEFINITIONS: List[Tool] = [
             "required": ["address"],
         },
     ),
+    Tool(
+        name="get_transactions_between_addresses",
+        description="List transactions between two addresses within a time range (TRONGRID → TRONSCAN).",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "address_a": {"type": "string", "description": "TRON Base58 address"},
+                "address_b": {"type": "string", "description": "TRON Base58 address"},
+                "start_ts_ms": {"type": "integer", "description": "Start time (Unix ms)"},
+                "end_ts_ms": {"type": "integer", "description": "End time (Unix ms, default now)"},
+                "limit": {"type": "integer", "description": "Page size, 1-50", "minimum": 1, "maximum": 50},
+                "max_pages": {"type": "integer", "description": "Max pages to scan", "minimum": 1, "maximum": 200},
+            },
+            "required": ["address_a", "address_b", "start_ts_ms"],
+        },
+    ),
 ]
 
 
@@ -208,6 +225,170 @@ def _get_trc20_candidates(account: Dict[str, Any]) -> List[Dict[str, Any]]:
         or account.get("tokenBalances")
         or []
     )
+
+
+def _tx_timestamp_ms(tx: Dict[str, Any]) -> Optional[int]:
+    ts = (
+        tx.get("block_timestamp")
+        or tx.get("timestamp")
+        or tx.get("time")
+        or tx.get("block_ts")
+        or tx.get("blockTimeStamp")
+    )
+    try:
+        return int(ts) if ts is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _tx_owner_to(tx: Dict[str, Any]) -> tuple[Optional[str], Optional[str]]:
+    owner = _normalize_address(tx.get("ownerAddress") or tx.get("from"))
+    to = _normalize_address(tx.get("toAddress") or tx.get("to"))
+    if not owner or not to:
+        raw_owner, raw_to = _extract_owner_to_from_raw(tx)
+        owner = owner or _normalize_address(raw_owner)
+        to = to or _normalize_address(raw_to)
+    return owner, to
+
+
+def _match_between(owner: Optional[str], to: Optional[str], a: str, b: str) -> Optional[str]:
+    if owner == a and to == b:
+        return "A_TO_B"
+    if owner == b and to == a:
+        return "B_TO_A"
+    return None
+
+
+def get_transactions_between_addresses(
+    address_a: str,
+    address_b: str,
+    start_ts_ms: int,
+    end_ts_ms: Optional[int] = None,
+    limit: int = 50,
+    max_pages: int = 10,
+) -> Dict[str, Any]:
+    validate_address(address_a)
+    validate_address(address_b)
+    start_ts = int(start_ts_ms)
+    end_ts = int(end_ts_ms) if end_ts_ms is not None else int(time.time() * 1000)
+    if start_ts > end_ts:
+        raise ValidationError("start_ts_ms must be <= end_ts_ms")
+    limit = max(1, min(int(limit or 50), 50))
+    max_pages = max(1, min(int(max_pages or 10), 200))
+
+    items: List[Dict[str, Any]] = []
+    errors: list[str] = []
+    source = None
+
+    # Try TRONGRID first
+    try:
+        fp: Any = 0
+        for _ in range(max_pages):
+            data = fetch_transactions(address_a, limit=limit, start=fp or 0)
+            source = "TRONGRID"
+            rows = data.get("data") or []
+            if not rows:
+                break
+            stop = False
+            for tx in rows:
+                ts = _tx_timestamp_ms(tx)
+                if ts is not None and ts < start_ts:
+                    stop = True
+                    break
+                if ts is not None and ts > end_ts:
+                    continue
+                owner, to = _tx_owner_to(tx)
+                direction = _match_between(owner, to, address_a, address_b)
+                if not direction:
+                    continue
+                items.append(
+                    {
+                        "txid": tx.get("txID") or tx.get("hash"),
+                        "timestamp": ts,
+                        "from": owner,
+                        "to": to,
+                        "direction": direction,
+                        "contractType": (tx.get("raw_data", {}).get("contract") or [{}])[0].get("type")
+                        if tx.get("raw_data")
+                        else tx.get("contractType"),
+                    }
+                )
+            if stop:
+                break
+            fp = (data.get("meta") or {}).get("fingerprint")
+            if not fp:
+                break
+        return {
+            "addressA": address_a,
+            "addressB": address_b,
+            "startTsMs": start_ts,
+            "endTsMs": end_ts,
+            "count": len(items),
+            "items": items,
+            "source": source or "TRONGRID",
+        }
+    except UpstreamError as err:
+        errors.append(f"Trongrid error: {err}")
+
+    # Fallback: TRONSCAN
+    try:
+        start = 0
+        for _ in range(max_pages):
+            data = fetch_transactions_tronscan(address_a, limit=limit, start=start)
+            source = "TRONSCAN"
+            rows = data.get("data") or data.get("transactions") or []
+            if not rows:
+                break
+            stop = False
+            for tx in rows:
+                ts = _tx_timestamp_ms(tx)
+                if ts is not None and ts < start_ts:
+                    stop = True
+                    break
+                if ts is not None and ts > end_ts:
+                    continue
+                owner, to = _tx_owner_to(tx)
+                direction = _match_between(owner, to, address_a, address_b)
+                if not direction:
+                    continue
+                items.append(
+                    {
+                        "txid": tx.get("txID") or tx.get("hash"),
+                        "timestamp": ts,
+                        "from": owner,
+                        "to": to,
+                        "direction": direction,
+                        "contractType": (tx.get("raw_data", {}).get("contract") or [{}])[0].get("type")
+                        if tx.get("raw_data")
+                        else tx.get("contractType"),
+                    }
+                )
+            if stop:
+                break
+            if len(rows) < limit:
+                break
+            start += limit
+        return {
+            "addressA": address_a,
+            "addressB": address_b,
+            "startTsMs": start_ts,
+            "endTsMs": end_ts,
+            "count": len(items),
+            "items": items,
+            "source": source or "TRONSCAN",
+        }
+    except UpstreamError as err:
+        errors.append(f"Tronscan error: {err}")
+        return {
+            "addressA": address_a,
+            "addressB": address_b,
+            "startTsMs": start_ts,
+            "endTsMs": end_ts,
+            "count": 0,
+            "items": [],
+            "source": "NONE",
+            "error": "; ".join(errors),
+        }
 
 
 def _parse_decimal(value: str) -> Optional[Decimal]:
@@ -705,6 +886,15 @@ def call_tool(name: str, args: Optional[Dict[str, Any]]) -> Any:
         return get_trc20_transfers(address=args.get("address"), limit=args.get("limit", 20))
     if name == "get_address_labels":
         return get_address_labels(address=args.get("address"))
+    if name == "get_transactions_between_addresses":
+        return get_transactions_between_addresses(
+            address_a=args.get("address_a"),
+            address_b=args.get("address_b"),
+            start_ts_ms=args.get("start_ts_ms"),
+            end_ts_ms=args.get("end_ts_ms"),
+            limit=args.get("limit", 50),
+            max_pages=args.get("max_pages", 10),
+        )
     if name in tx_assistant.TOOL_NAMES:
         return tx_assistant.call_tool(name, args)
     if name in trc20_assistant.TOOL_NAMES:

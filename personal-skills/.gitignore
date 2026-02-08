@@ -1,0 +1,10 @@
+# Ignore all generated skills by default
+*/
+
+# But keep the README
+!README.md
+!.gitignore
+
+# Optionally, users can commit specific skills they want to keep
+# by removing the */ pattern above or adding specific exceptions like:
+# !my-important-skill/
