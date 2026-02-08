@@ -444,12 +444,7 @@ def onchain_alerts(
                 telegram_broadcast(msg)
             else:
                 send_telegram(msg, chat_id=chat_id)
-        elif not alerts:
-            msg = "On-chain Alerts: no changes above threshold"
-            if broadcast:
-                telegram_broadcast(msg)
-            else:
-                send_telegram(msg, chat_id=chat_id)
+        # no alerts -> no message
 
     return {"ok": True, "alerts": alerts, "snapshot": current, "rules": rules, "statePath": str(state_file)}
 

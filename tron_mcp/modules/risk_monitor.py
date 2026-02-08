@@ -523,15 +523,12 @@ def position_alerts(
                     }
                 )
 
-    if notify:
+    if notify and alerts:
         title = f"Position Alerts ({exchange_id})"
-        if alerts:
-            lines = [title]
-            for item in alerts[:8]:
-                lines.append(f"- {item['code']}: {item['message']}")
-            msg = "\n".join(lines)
-        else:
-            msg = f"{title}: no alerts"
+        lines = [title]
+        for item in alerts[:8]:
+            lines.append(f"- {item['code']}: {item['message']}")
+        msg = "\n".join(lines)
         if broadcast:
             telegram_broadcast(msg)
         else:
