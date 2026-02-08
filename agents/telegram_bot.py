@@ -9,11 +9,12 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+import threading
 
 from tron_mcp import settings, tools
 from tron_mcp.ai import call_chat
 from tron_mcp.utils.errors import UpstreamError, ValidationError
-from tron_mcp.modules import notify_telegram
+from tron_mcp.modules import notify_telegram, onchain_monitor, risk_monitor
 
 
 log = logging.getLogger("telegram_bot")
@@ -224,6 +225,7 @@ def run_telegram_bot(poll_timeout: int = 20, max_rounds: int = 12) -> None:
     pending_verifications: Dict[str, Dict[str, Any]] = {}
 
     log.info("Telegram bot started. Poll timeout=%s", poll_timeout)
+    _start_monitors()
     while True:
         request_timeout = max(float(settings.SETTINGS.request_timeout), poll_timeout + 5)
         try:
@@ -313,6 +315,68 @@ def run_telegram_bot(poll_timeout: int = 20, max_rounds: int = 12) -> None:
                 reply = f"LLM error: {err}"
 
             notify_telegram.send_telegram(message=_trim_message(reply), chat_id=chat_id)
+
+
+def _load_rules(path: str | None) -> dict:
+    if not path:
+        return {}
+    rules_path = Path(path)
+    if not rules_path.exists():
+        return {}
+    try:
+        data = json.loads(rules_path.read_text())
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _start_monitors() -> None:
+    def _start_onchain_monitor() -> None:
+        rules_path = settings.SETTINGS.__dict__.get("onchain_rules_path") or "onchain_rules.json"
+        rules = _load_rules(rules_path)
+        interval = int(rules.get("interval_sec") or 60)
+
+        def loop() -> None:
+            while True:
+                try:
+                    onchain_monitor.onchain_alerts(
+                        rules_path=rules_path,
+                        notify=True,
+                        broadcast=False,
+                        log_audit=True,
+                    )
+                except Exception as err:  # noqa: BLE001
+                    log.warning("onchain monitor error: %s", err)
+                time.sleep(interval)
+
+        t = threading.Thread(target=loop, name="onchain-monitor", daemon=True)
+        t.start()
+        log.info("On-chain monitor started (interval=%ss).", interval)
+
+    def _start_risk_monitor() -> None:
+        rules_path = settings.SETTINGS.__dict__.get("risk_rules_path") or "risk_rules.json"
+        rules = _load_rules(rules_path)
+        interval = int(rules.get("interval_sec") or 60)
+
+        def loop() -> None:
+            while True:
+                try:
+                    risk_monitor.position_alerts(
+                        exchange_id=settings.SETTINGS.exchange_id or None,
+                        rules_path=rules_path,
+                        notify=True,
+                        broadcast=False,
+                    )
+                except Exception as err:  # noqa: BLE001
+                    log.warning("risk monitor error: %s", err)
+                time.sleep(interval)
+
+        t = threading.Thread(target=loop, name="risk-monitor", daemon=True)
+        t.start()
+        log.info("Risk monitor started (interval=%ss).", interval)
+
+    _start_onchain_monitor()
+    _start_risk_monitor()
 
 
 def main() -> int:

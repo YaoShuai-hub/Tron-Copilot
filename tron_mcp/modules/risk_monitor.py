@@ -152,6 +152,16 @@ def _normalize_pct(value: Any) -> Optional[float]:
     return pct
 
 
+def _resolve_exchange_creds(exchange_id: Optional[str]) -> tuple[Dict[str, Any], str]:
+    creds = exchange_adapter._resolve_creds()
+    resolved_id = creds.get("exchange_id")
+    if not resolved_id:
+        raise ValidationError("EXCHANGE_ID not found in .env.private")
+    if exchange_id and exchange_id != resolved_id:
+        raise ValidationError("exchange_id mismatch; update EXCHANGE_ID in .env.private")
+    return creds, resolved_id
+
+
 def _position_notional(pos: Dict[str, Any]) -> Optional[float]:
     notional = pos.get("notional") or pos.get("info", {}).get("notional")
     if notional is not None:
@@ -229,7 +239,7 @@ def _price_for_asset(ex: Any, asset: str, quote: str, stable_assets: List[str], 
 
 
 def position_snapshot(
-    exchange_id: str,
+    exchange_id: Optional[str],
     api_key: Optional[str] = None,
     secret: Optional[str] = None,
     password: Optional[str] = None,
@@ -240,20 +250,11 @@ def position_snapshot(
     include_positions: bool = False,
     rules_path: Optional[str] = None,
 ) -> Dict[str, Any]:
-    if not exchange_id:
-        raise ValidationError("exchange_id is required")
+    creds, exchange_id = _resolve_exchange_creds(exchange_id)
     rules = _load_rules(rules_path)
     quote_asset = (quote_asset or rules.get("quote_asset") or "USDT").upper()
     stable_assets = [str(a).upper() for a in rules.get("stable_assets") or []]
-
-    creds = exchange_adapter._resolve_creds(
-        exchange_id=exchange_id,
-        api_key=api_key,
-        secret=secret,
-        password=password,
-        api_domain=api_domain,
-        proxy=proxy,
-    )
+    sandbox = sandbox or bool(creds.get("sandbox"))
     ex = exchange_adapter._init_exchange(
         creds["exchange_id"],
         creds["api_key"],
@@ -355,7 +356,7 @@ def position_snapshot(
 
 
 def position_alerts(
-    exchange_id: str,
+    exchange_id: Optional[str],
     api_key: Optional[str] = None,
     secret: Optional[str] = None,
     password: Optional[str] = None,
@@ -369,6 +370,8 @@ def position_alerts(
     broadcast: bool = False,
 ) -> Dict[str, Any]:
     rules = _load_rules(rules_path)
+    creds, exchange_id = _resolve_exchange_creds(exchange_id)
+    sandbox = sandbox or bool(creds.get("sandbox"))
     snapshot = position_snapshot(
         exchange_id=exchange_id,
         api_key=api_key,
@@ -451,14 +454,7 @@ def position_alerts(
 
     if position_rules.get("enable", True):
         try:
-            creds = exchange_adapter._resolve_creds(
-                exchange_id=exchange_id,
-                api_key=api_key,
-                secret=secret,
-                password=password,
-                api_domain=api_domain,
-                proxy=proxy,
-            )
+            creds, exchange_id = _resolve_exchange_creds(exchange_id)
             ex = exchange_adapter._init_exchange(
                 creds["exchange_id"],
                 creds["api_key"],

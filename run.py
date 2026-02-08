@@ -37,13 +37,27 @@ Exposed tools (all return JSON-serializable dicts):
 """
 
 import sys
+import json
+import threading
+import time
+from pathlib import Path
 
 from fastmcp import FastMCP
 
 from tron_mcp import safety, settings, tools
 from tron_mcp.extensions import tx_assistant, trc20_assistant, agent_pipeline, local_signer
-from tron_mcp.modules import chain_ops, funds_flow, notify_telegram, audit_log, market_data, exchange_adapter
+from tron_mcp.modules import (
+    chain_ops,
+    funds_flow,
+    notify_telegram,
+    audit_log,
+    market_data,
+    exchange_adapter,
+    onchain_monitor,
+    risk_monitor,
+)
 from tron_mcp.utils.logging_setup import setup_logging
+import logging
 
 
 mcp = FastMCP(
@@ -205,6 +219,66 @@ def main() -> int:
         int: 0 on normal exit.
     """
     setup_logging(level=settings.SETTINGS.log_level, logfile=settings.SETTINGS.log_file)
+    log = logging.getLogger(__name__)
+
+    def _load_rules(path: str | None) -> dict:
+        if not path:
+            return {}
+        rules_path = Path(path)
+        if not rules_path.exists():
+            return {}
+        try:
+            data = json.loads(rules_path.read_text())
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
+
+    def _start_onchain_monitor() -> None:
+        rules_path = settings.SETTINGS.__dict__.get("onchain_rules_path") or "onchain_rules.json"
+        rules = _load_rules(rules_path)
+        interval = int(rules.get("interval_sec") or 60)
+
+        def loop() -> None:
+            while True:
+                try:
+                    onchain_monitor.onchain_alerts(
+                        rules_path=rules_path,
+                        notify=True,
+                        broadcast=False,
+                        log_audit=True,
+                    )
+                except Exception as err:  # noqa: BLE001
+                    log.warning("onchain monitor error: %s", err)
+                time.sleep(interval)
+
+        t = threading.Thread(target=loop, name="onchain-monitor", daemon=True)
+        t.start()
+        log.info("On-chain monitor started (interval=%ss).", interval)
+
+    def _start_risk_monitor() -> None:
+        rules_path = settings.SETTINGS.__dict__.get("risk_rules_path") or "risk_rules.json"
+        rules = _load_rules(rules_path)
+        interval = int(rules.get("interval_sec") or 60)
+
+        def loop() -> None:
+            while True:
+                try:
+                    risk_monitor.position_alerts(
+                        exchange_id=settings.SETTINGS.exchange_id or None,
+                        rules_path=rules_path,
+                        notify=True,
+                        broadcast=False,
+                    )
+                except Exception as err:  # noqa: BLE001
+                    log.warning("risk monitor error: %s", err)
+                time.sleep(interval)
+
+        t = threading.Thread(target=loop, name="risk-monitor", daemon=True)
+        t.start()
+        log.info("Risk monitor started (interval=%ss).", interval)
+
+    _start_onchain_monitor()
+    _start_risk_monitor()
     try:
         mcp.run()
     except KeyboardInterrupt:

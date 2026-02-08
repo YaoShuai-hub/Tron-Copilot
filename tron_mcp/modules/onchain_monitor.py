@@ -7,6 +7,7 @@ import time
 import urllib.request
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+import re
 
 from tron_mcp import safety, settings
 from tron_mcp.tron_api import fetch_account, fetch_account_trongrid
@@ -92,8 +93,41 @@ def _load_rules(path: Optional[str]) -> Dict[str, Any]:
                 rules = _merge_rules(rules, data)
         except Exception:
             pass
+    rules = _apply_env_substitutions(rules)
     rules["rules_path"] = str(rules_path)
     return rules
+
+
+def _load_env_private(path: Path) -> dict:
+    env = {}
+    if not path.exists():
+        return env
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        env[k.strip()] = v.strip().strip('"').strip("'")
+    return env
+
+
+_ENV_RE = re.compile(r"\$\{([A-Z0-9_]+)\}")
+
+
+def _apply_env_substitutions(value: Any) -> Any:
+    env = _load_env_private(Path(".env.private"))
+
+    if isinstance(value, dict):
+        return {k: _apply_env_substitutions(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_apply_env_substitutions(v) for v in value]
+    if isinstance(value, str):
+        def repl(match: re.Match[str]) -> str:
+            key = match.group(1)
+            return env.get(key, match.group(0))
+
+        return _ENV_RE.sub(repl, value)
+    return value
 
 
 def _load_state(path: Path) -> Dict[str, Any]:

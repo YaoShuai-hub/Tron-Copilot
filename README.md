@@ -196,6 +196,7 @@ ONCHAIN_STATE_PATH  (可选，默认 logs/onchain_state.json)
 
 风险规则配置：
 `risk_rules.json` 可自定义仓位预警与开仓辅助阈值；如需自定义路径，可设置 `RISK_RULES_PATH`。
+风控监控会读取 `.env.private` 中的 `EXCHANGE_ID` 等凭证。
 新增仓位/订单监控项（positions）：
 - `max_unrealized_loss_pct`：单仓浮亏阈值（例如 -0.05 表示 -5%）
 - `max_leverage`：单仓杠杆上限
@@ -205,9 +206,12 @@ ONCHAIN_STATE_PATH  (可选，默认 logs/onchain_state.json)
 链上监控配置：
 `onchain_rules.json` 定义监控地址/代币与阈值（务必填写真实地址）；如需自定义路径，可设置 `ONCHAIN_RULES_PATH`。
 EVM 监控可在规则中配置 `chain: "EVM"` 并提供 `rpc_url`（或写入 `evm_rpcs` 映射）。
+支持在 `onchain_rules.json` 中用 `${ENV_VAR}` 从 `.env.private` 注入值（例如 `${TRON_WALLET_ADDRESS}`）。
 
 定期监控示例（自动推送到 Telegram）：
 ```bash
+# MCP 服务启动时会自动开启链上监控与风控监控（使用规则文件中的 interval_sec 或默认 60s）。
+# 如需手动运行或单独调试，可用 monitor.py：
 # 链上资产监控（读取 onchain_rules.json）
 python3 monitor.py --mode onchain --interval 60 --notify --broadcast
 
