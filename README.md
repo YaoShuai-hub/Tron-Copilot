@@ -62,7 +62,20 @@
 | `exchange_cancel_order(...)` | 交易所撤单（CCXT） | REST | 任务模块 |
 | `exchange_fetch_order(...)` | 交易所查单（CCXT） | REST | 任务模块 |
 
-### 7) 任务模块：通知与审计
+### 7) 任务模块：风控与开仓辅助
+| 工具 | 作用 | 数据源 | 备注 |
+| --- | --- | --- | --- |
+| `position_snapshot(...)` | 仓位/余额快照 | 交易所 | 任务模块 |
+| `position_alerts(...)` | 仓位预警 | 交易所 | 任务模块 |
+| `entry_assist(...)` | 开仓辅助（盘口/K线） | REST | 任务模块 |
+
+### 8) 任务模块：链上资产监控
+| 工具 | 作用 | 数据源 | 备注 |
+| --- | --- | --- | --- |
+| `onchain_snapshot(...)` | 链上余额快照 | TRONGRID/TRONSCAN | 任务模块 |
+| `onchain_alerts(...)` | 链上变化预警 | TRONGRID/TRONSCAN | 任务模块 |
+
+### 9) 任务模块：通知与审计
 | 工具 | 作用 | 数据源 | 备注 |
 | --- | --- | --- | --- |
 | `send_telegram(message, ...)` | Telegram 通知 | Telegram | 任务模块 |
@@ -74,7 +87,7 @@
 | `audit_get_logs(limit?, path?)` | 读取审计日志 | 本地 | 任务模块 |
 | `audit_reconcile(txids, path?)` | 对账（查链上状态） | TRONGRID | 任务模块 |
 
-### 8) 资产估值
+### 10) 资产估值
 | 工具 | 作用 | 数据源 | 备注 |
 | --- | --- | --- | --- |
 | `get_token_balance(address, token)` | 任意币种余额（TRX/TRC20） | TRONSCAN | symbol/合约 |
@@ -168,6 +181,69 @@ EXCHANGE_SECRET    (可选)
 EXCHANGE_PASSWORD  (可选)
 EXCHANGE_API_DOMAIN (可选，binance 域名替换，如 api1.binance.com)
 EXCHANGE_PROXY      (可选，HTTP/SOCKS 代理，如 http://127.0.0.1:7890 或 socks5://127.0.0.1:1080)
+RISK_RULES_PATH     (可选，默认 risk_rules.json)
+ONCHAIN_RULES_PATH  (可选，默认 onchain_rules.json)
+ONCHAIN_STATE_PATH  (可选，默认 logs/onchain_state.json)
+```
+
+风险规则配置：
+`risk_rules.json` 可自定义仓位预警与开仓辅助阈值；如需自定义路径，可设置 `RISK_RULES_PATH`。
+新增仓位/订单监控项（positions）：
+- `max_unrealized_loss_pct`：单仓浮亏阈值（例如 -0.05 表示 -5%）
+- `max_leverage`：单仓杠杆上限
+- `max_position_notional_ratio`：单仓名义价值占总资产比例上限
+- `max_open_orders`：未成交订单数量上限
+
+链上监控配置：
+`onchain_rules.json` 定义监控地址/代币与阈值（务必填写真实地址）；如需自定义路径，可设置 `ONCHAIN_RULES_PATH`。
+EVM 监控可在规则中配置 `chain: "EVM"` 并提供 `rpc_url`（或写入 `evm_rpcs` 映射）。
+
+定期监控示例（自动推送到 Telegram）：
+```bash
+# 链上资产监控（读取 onchain_rules.json）
+python3 monitor.py --mode onchain --interval 60 --notify --broadcast
+
+# 交易所仓位预警（读取 risk_rules.json）
+python3 monitor.py --mode position --exchange-id binance --interval 60 --notify --broadcast
+
+# 全部监控（可分别指定规则文件）
+python3 monitor.py --mode all --exchange-id binance --interval 60 --notify --broadcast \
+  --onchain-rules onchain_rules.json --risk-rules risk_rules.json
+
+# 开启审计日志
+python3 monitor.py --mode onchain --interval 60 --notify --broadcast --audit
+```
+
+`onchain_rules.json` 示例：
+```json
+{
+  "interval_sec": 60,
+  "notify_on": ["increase", "decrease"],
+  "min_change_default": 0.01,
+  "state_path": "logs/onchain_state.json",
+  "evm_rpcs": {
+    "ETH": "https://your-ethereum-rpc"
+  },
+  "addresses": [
+    {
+      "address": "YOUR_TRON_ADDRESS",
+      "tokens": ["TRX", "USDT"],
+      "thresholds": { "TRX": 5, "USDT": 1 }
+    },
+    {
+      "label": "evm-wallet",
+      "chain": "EVM",
+      "network": "ETH",
+      "rpc_url": "https://your-ethereum-rpc",
+      "address": "0xYourEvmAddress",
+      "tokens": [
+        "ETH",
+        { "symbol": "USDT", "type": "ERC20", "contract": "0xYourTokenContract", "decimals": 6 }
+      ],
+      "thresholds": { "ETH": 0.05, "USDT": 10 }
+    }
+  ]
+}
 ```
 👉 建议把真实 key 放 `.env`（已在 `.gitignore`），示例见 `.env.example`。
 

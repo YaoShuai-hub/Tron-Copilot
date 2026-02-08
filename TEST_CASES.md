@@ -284,6 +284,31 @@ python3 -c "from tron_mcp import tools; print(tools.call_tool('exchange_fetch_de
 # withdraw (auto infer network for TRON address if network not provided)
 python3 -c "from tron_mcp import tools; print(tools.call_tool('exchange_withdraw', {'currency':'USDT','amount':1,'address':'TXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX'}))"
 ```
+
+### 4.7) Risk Monitor (Position / Entry Assist)
+
+```bash
+# position snapshot (balances + exposures)
+python3 -c "from tron_mcp import tools; print(tools.call_tool('position_snapshot', {'exchange_id':'binance'}))"
+
+# position alerts (default rules)
+python3 -c "from tron_mcp import tools; print(tools.call_tool('position_alerts', {'exchange_id':'binance'}))"
+
+# entry assist (orderbook + kline)
+python3 -c "from tron_mcp import tools; print(tools.call_tool('entry_assist', {'symbol':'BTCUSDT'}))"
+```
+
+### 4.8) On-chain Asset Monitor
+
+```bash
+# edit onchain_rules.json to set real addresses
+
+# snapshot (uses onchain_rules.json if addresses not provided)
+python3 -c "from tron_mcp import tools; print(tools.call_tool('onchain_snapshot', {}))"
+
+# alerts (compare with last snapshot, notify Telegram)
+python3 -c "from tron_mcp import tools; print(tools.call_tool('onchain_alerts', {'notify':True,'broadcast':True,'log_audit':True}))"
+```
 ## 5) MCP JSON-RPC Example
 
 ```bash
