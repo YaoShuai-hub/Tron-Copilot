@@ -103,6 +103,12 @@ python3 -m agents.agent_runner --prompt "Show me TRON energy and bandwidth fees.
 python3 -m agents.agent_runner --debug --prompt "List the last 5 transactions for address THb4CqiFdwNHsWsQCs4JhzwjMWys4aqCbF."
 ```
 
+Telegram 交互式助手（本地启动）：
+```bash
+# 在 .env.private 中配置 TELEGRAM_BOT_TOKEN（以及可选 TELEGRAM_CHAT_ID / TELEGRAM_ALLOW_ALL）
+python3 -m agents.telegram_bot
+```
+
 可选 Textual TUI：
 ```bash
 pip3 install textual
@@ -160,6 +166,8 @@ SAFETY_ENABLE      (true/false，控制 _human_notes)
 TELEGRAM_BOT_TOKEN (可选)
 TELEGRAM_CHAT_ID   (可选)
 TELEGRAM_SUBSCRIBERS_PATH (可选，默认 logs/telegram_subscribers.json)
+TELEGRAM_ALLOW_ALL (可选，true 则允许所有 chat_id 访问 bot)
+TELEGRAM_AUTH_BOT_TOKEN (可选，验证码使用的单独 bot token)
 AUDIT_LOG_DIR      (可选，默认 logs/transactions)
 MARKET_DATA_BASE   (可选，默认 https://api.binance.com)
 EXCHANGE_ID        (可选)
