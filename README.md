@@ -115,6 +115,17 @@ source .venv/bin/activate
 pip3 install -r requirements.txt
 ```
 
+一键启动（Copilot 前端 API + 前端页面 + MCP + Telegram bot）：
+```bash
+# 需要 npm（用于启动 frontend/），以及已安装 python 依赖（requirements.txt）
+# Telegram bot 需在 .env.private 中配置 TELEGRAM_BOT_TOKEN，并设置 TELEGRAM_ALLOW_ALL=true 或 TELEGRAM_CHAT_ID
+chmod +x start_all.sh
+./start_all.sh
+```
+说明：
+- 会自动选择可用端口（优先 `BC_COPILOT_PORT`，否则尝试 8000/8001/8002/8080），并设置 `MCP_SERVER_URL=http://localhost:${BC_COPILOT_PORT}`。
+- 退出时 `Ctrl+C` 会同时停止所有子进程。
+
 运行 MCP 服务器（stdio）：
 ```bash
 python3 run.py
@@ -139,7 +150,7 @@ python3 -m agents.agent_runner --debug --prompt "List the last 5 transactions fo
 
 Telegram 交互式助手（本地启动）：
 ```bash
-# 在 .env.private 中配置 TELEGRAM_BOT_TOKEN（以及可选 TELEGRAM_CHAT_ID / TELEGRAM_ALLOW_ALL）
+# 在 .env.private 中配置 TELEGRAM_BOT_TOKEN，并设置 TELEGRAM_ALLOW_ALL=true 或 TELEGRAM_CHAT_ID
 python3 -m agents.telegram_bot
 ```
 
@@ -280,21 +291,31 @@ python3 monitor.py --mode onchain --interval 60 --notify --broadcast --audit
 ```
 👉 建议把真实 key 放 `.env`（已在 `.gitignore`），示例见 `.env.example`。
 
-**私钥配置（本地签名专用）**
+## 🔐 `.env.private`（私密配置：Telegram / 私钥 / 交易所）
+`.env` 用于普通配置（TRONGRID/TRONSCAN/LLM 等）；`.env.private` 用于私密信息（Telegram bot token、交易所密钥、私钥等）。该文件已加入 `.gitignore`，不会被提交。
+
 1. 复制示例文件：
 ```bash
 cp .env.private.example .env.private
 ```
-2. 填写私钥（十六进制，不带 `0x`）：
+
+2. Telegram bot（最小可用配置，二选一放行方式）：
+```
+TELEGRAM_BOT_TOKEN=123456:AA...
+TELEGRAM_ALLOW_ALL=true
+# 或者（更安全）只允许你自己：
+# TELEGRAM_CHAT_ID=123456789
+```
+
+3. 本地签名（可选；需要时再填），私钥为十六进制且不带 `0x`：
 ```
 TRON_PRIVATE_KEY=your_private_key_hex
 ```
-3. 使用本地签名工具：
+
+4. 使用本地签名工具：
 ```bash
 python3 -c "from tron_mcp.extensions.local_signer import sign_transaction; print(sign_transaction({'txID':'...','raw_data_hex':'...'}))"
 ```
-
-`.env.private` 已加入 `.gitignore`，不会被提交。
 
 ## 📄 提交材料与文档
 - 部署文档: [../DEPLOYMENT.md](../DEPLOYMENT.md)
