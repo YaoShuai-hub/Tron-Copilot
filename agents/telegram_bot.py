@@ -169,8 +169,11 @@ def _agent_loop(
     chat_id: Optional[str] = None,
     pending_verifications: Optional[Dict[str, Dict[str, Any]]] = None,
     auth_bot_token: Optional[str] = None,
+    bash_disabled: bool = False,
 ) -> Dict[str, Any]:
     tool_schema = tools.list_tools()["tools"]
+    if bash_disabled:
+        tool_schema = [t for t in tool_schema if t.get("name") != "run_bash_command"]
     history: List[Dict[str, Any]] = list(messages or [])
     if not any(m.get("role") == "system" for m in history):
         history.insert(0, {"role": "system", "content": SYSTEM_TOOL_POLICY})
@@ -232,7 +235,10 @@ def _agent_loop(
                 )
                 result = {"status": "VERIFICATION_REQUIRED", "message": "OTP sent to Telegram."}
             else:
-                result = _exec_tool_call(name, arguments)
+                if bash_disabled and name == "run_bash_command":
+                    result = {"error": "run_bash_command is disabled for this chat. Use /startbash to enable."}
+                else:
+                    result = _exec_tool_call(name, arguments)
             log.info("Tool '%s' result: %s", name, result)
             history.append(
                 {
@@ -256,6 +262,7 @@ def run_telegram_bot(poll_timeout: int = 20, max_rounds: int = 12) -> None:
     offset = 0
     conversations: Dict[str, List[Dict[str, Any]]] = {}
     pending_verifications: Dict[str, Dict[str, Any]] = {}
+    bash_disabled_chats: set[str] = set()
 
     log.info("Telegram bot started. Poll timeout=%s", poll_timeout)
     _start_monitors()
@@ -292,6 +299,8 @@ def run_telegram_bot(poll_timeout: int = 20, max_rounds: int = 12) -> None:
                 notify_telegram.send_telegram(
                     message="已连接到本地助手。直接发送问题即可。\n"
                     "支持 /reset 清空上下文。\n"
+                    "支持 /stopbash 禁用 run_bash_command。\n"
+                    "支持 /startbash 启用 run_bash_command。\n"
                     "支持 /clearcustomtools 清空自定义工具。\n"
                     "如需订阅通知，请运行 telegram_subscribe。",
                     chat_id=chat_id,
@@ -301,6 +310,14 @@ def run_telegram_bot(poll_timeout: int = 20, max_rounds: int = 12) -> None:
                 conversations.pop(chat_id, None)
                 pending_verifications.pop(chat_id, None)
                 notify_telegram.send_telegram(message="上下文已清空。", chat_id=chat_id)
+                continue
+            if text == "/stopbash":
+                bash_disabled_chats.add(chat_id)
+                notify_telegram.send_telegram(message="run_bash_command 已禁用。", chat_id=chat_id)
+                continue
+            if text == "/startbash":
+                bash_disabled_chats.discard(chat_id)
+                notify_telegram.send_telegram(message="run_bash_command 已启用。", chat_id=chat_id)
                 continue
             if text == "/clearcustomtools":
                 try:
@@ -349,6 +366,7 @@ def run_telegram_bot(poll_timeout: int = 20, max_rounds: int = 12) -> None:
                     chat_id=chat_id,
                     pending_verifications=pending_verifications,
                     auth_bot_token=auth_bot_token,
+                    bash_disabled=chat_id in bash_disabled_chats,
                 )
                 conversations[chat_id] = result.get("messages", [])
                 reply = result.get("final", {}).get("content", "") or "(empty reply)"
