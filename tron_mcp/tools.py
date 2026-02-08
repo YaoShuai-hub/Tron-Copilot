@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 from . import settings
 from .extensions import tx_assistant, trc20_assistant, agent_pipeline, local_signer
 from .modules import chain_ops, funds_flow, notify_telegram, bash_tool
-from .modules import audit_log, market_data, exchange_adapter
+from .modules import audit_log, market_data, exchange_adapter, risk_monitor, onchain_monitor
 from .utils.errors import ValidationError
 from .tron_api import (
     fetch_account,
@@ -158,6 +158,8 @@ def list_tools() -> Dict[str, Any]:
     tools.extend(audit_log.TOOL_DEFINITIONS)
     tools.extend(market_data.TOOL_DEFINITIONS)
     tools.extend(exchange_adapter.TOOL_DEFINITIONS)
+    tools.extend(risk_monitor.TOOL_DEFINITIONS)
+    tools.extend(onchain_monitor.TOOL_DEFINITIONS)
     return {"tools": tools}
 
 
@@ -721,6 +723,10 @@ def call_tool(name: str, args: Optional[Dict[str, Any]]) -> Any:
         return market_data.call_tool(name, args)
     if name in exchange_adapter.TOOL_NAMES:
         return exchange_adapter.call_tool(name, args)
+    if name in risk_monitor.TOOL_NAMES:
+        return risk_monitor.call_tool(name, args)
+    if name in onchain_monitor.TOOL_NAMES:
+        return onchain_monitor.call_tool(name, args)
     if name == "get_token_balance":
         return get_token_balance(address=args.get("address"), token=args.get("token"))
     if name == "get_total_value":

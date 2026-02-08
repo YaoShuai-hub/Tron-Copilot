@@ -45,6 +45,9 @@ class Settings:
     exchange_password: str | None = None
     exchange_api_domain: str | None = None
     exchange_proxy: str | None = None
+    risk_rules_path: str | None = "risk_rules.json"
+    onchain_rules_path: str | None = "onchain_rules.json"
+    onchain_state_path: str | None = "logs/onchain_state.json"
     exchange_api_domain: str | None = None
 
 
@@ -84,6 +87,9 @@ def _apply_env_overrides(cfg: Settings) -> Settings:
     cfg.exchange_password = os.getenv("EXCHANGE_PASSWORD", cfg.exchange_password)
     cfg.exchange_api_domain = os.getenv("EXCHANGE_API_DOMAIN", cfg.exchange_api_domain)
     cfg.exchange_proxy = os.getenv("EXCHANGE_PROXY", cfg.exchange_proxy)
+    cfg.risk_rules_path = os.getenv("RISK_RULES_PATH", cfg.risk_rules_path)
+    cfg.onchain_rules_path = os.getenv("ONCHAIN_RULES_PATH", cfg.onchain_rules_path)
+    cfg.onchain_state_path = os.getenv("ONCHAIN_STATE_PATH", cfg.onchain_state_path)
     cfg.exchange_api_domain = os.getenv("EXCHANGE_API_DOMAIN", cfg.exchange_api_domain)
     safety_env = os.getenv("SAFETY_ENABLE")
     if safety_env is not None:
@@ -121,6 +127,9 @@ def load_config(path: Path | None = None) -> Settings:
         cfg.exchange_password = data.get("exchange_password", cfg.exchange_password)
         cfg.exchange_api_domain = data.get("exchange_api_domain", cfg.exchange_api_domain)
         cfg.exchange_proxy = data.get("exchange_proxy", cfg.exchange_proxy)
+        cfg.risk_rules_path = data.get("risk_rules_path", cfg.risk_rules_path)
+        cfg.onchain_rules_path = data.get("onchain_rules_path", cfg.onchain_rules_path)
+        cfg.onchain_state_path = data.get("onchain_state_path", cfg.onchain_state_path)
         cfg.exchange_id = data.get("exchange_id", cfg.exchange_id)
         cfg.exchange_api_key = data.get("exchange_api_key", cfg.exchange_api_key)
         cfg.exchange_secret = data.get("exchange_secret", cfg.exchange_secret)

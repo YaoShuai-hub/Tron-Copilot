@@ -1,0 +1,31 @@
+{
+  "interval_sec": 60,
+  "notify_on": ["increase", "decrease"],
+  "min_change_default": 0.01,
+  "state_path": "logs/onchain_state.json",
+  "evm_rpcs": {
+    "ETH": "https://your-ethereum-rpc"
+  },
+  "addresses": [
+    {
+      "label": "main",
+      "chain": "TRON",
+      "address": "YOUR_TRON_ADDRESS",
+      "tokens": ["TRX", "USDT"],
+      "thresholds": { "TRX": 5, "USDT": 1 },
+      "notify": { "broadcast": true }
+    },
+    {
+      "label": "evm-wallet",
+      "chain": "EVM",
+      "network": "ETH",
+      "rpc_url": "https://your-ethereum-rpc",
+      "address": "0xYourEvmAddress",
+      "tokens": [
+        "ETH",
+        { "symbol": "USDT", "type": "ERC20", "contract": "0xYourTokenContract", "decimals": 6 }
+      ],
+      "thresholds": { "ETH": 0.05, "USDT": 10 }
+    }
+  ]
+}
