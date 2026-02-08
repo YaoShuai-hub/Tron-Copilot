@@ -53,6 +53,7 @@
 | 工具 | 作用 | 数据源 | 备注 |
 | --- | --- | --- | --- |
 | `exchange_get_balance(...)` | 交易所余额（CCXT） | REST | 任务模块 |
+| `exchange_get_asset_balance(...)` | 单币种余额查询（CCXT） | REST | 任务模块 |
 | `exchange_get_deposit_address(...)` | 交易所充值地址（CCXT） | REST | 任务模块 |
 | `exchange_withdraw(...)` | 交易所提现（CCXT） | REST | 任务模块 |
 | `exchange_fetch_withdrawals(...)` | 交易所提现记录（CCXT） | REST | 任务模块 |
@@ -118,6 +119,16 @@ curl -X POST http://localhost:8787/ \
 交易所适配工具（CCXT）需要额外安装：
 ```bash
 pip3 install ccxt
+```
+配置凭证（写入 `.env.private`）：
+```
+EXCHANGE_ID=binance
+EXCHANGE_API_KEY=your_api_key
+EXCHANGE_SECRET=your_secret
+EXCHANGE_PASSWORD=your_password_optional
+EXCHANGE_API_DOMAIN=api1.binance.com
+EXCHANGE_PROXY=http://127.0.0.1:7890
+EXCHANGE_SANDBOX=false
 ```
 
 ## 🧪 测试网与主网

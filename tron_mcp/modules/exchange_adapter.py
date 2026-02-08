@@ -15,18 +15,15 @@ TOOL_DEFINITIONS: List[Dict[str, Any]] = [
     {
         "name": "exchange_get_balance",
         "description": "Get balances from an exchange via CCXT.",
+        "inputSchema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "exchange_get_asset_balance",
+        "description": "Get balance for a single currency via CCXT.",
         "inputSchema": {
             "type": "object",
-            "properties": {
-                "exchange_id": {"type": "string", "description": "e.g., binance, okx"},
-                "api_key": {"type": "string"},
-                "secret": {"type": "string"},
-                "password": {"type": "string"},
-                "api_domain": {"type": "string", "description": "Override API domain (binance only)"},
-                "proxy": {"type": "string", "description": "Proxy URL, e.g. http://127.0.0.1:7890"},
-                "sandbox": {"type": "boolean"},
-            },
-            "required": [],
+            "properties": {"currency": {"type": "string", "description": "e.g., USDT"}},
+            "required": ["currency"],
         },
     },
     {
@@ -35,13 +32,6 @@ TOOL_DEFINITIONS: List[Dict[str, Any]] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "exchange_id": {"type": "string"},
-                "api_key": {"type": "string"},
-                "secret": {"type": "string"},
-                "password": {"type": "string"},
-                "api_domain": {"type": "string"},
-                "proxy": {"type": "string"},
-                "sandbox": {"type": "boolean"},
                 "currency": {"type": "string", "description": "e.g., USDT"},
                 "network": {"type": "string", "description": "e.g., TRC20/ERC20/BEP20"},
                 "params": {"type": "object"},
@@ -55,13 +45,6 @@ TOOL_DEFINITIONS: List[Dict[str, Any]] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "exchange_id": {"type": "string"},
-                "api_key": {"type": "string"},
-                "secret": {"type": "string"},
-                "password": {"type": "string"},
-                "api_domain": {"type": "string"},
-                "proxy": {"type": "string"},
-                "sandbox": {"type": "boolean"},
                 "currency": {"type": "string", "description": "e.g., USDT"},
                 "amount": {"type": "number"},
                 "address": {"type": "string"},
@@ -78,13 +61,6 @@ TOOL_DEFINITIONS: List[Dict[str, Any]] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "exchange_id": {"type": "string"},
-                "api_key": {"type": "string"},
-                "secret": {"type": "string"},
-                "password": {"type": "string"},
-                "api_domain": {"type": "string"},
-                "proxy": {"type": "string"},
-                "sandbox": {"type": "boolean"},
                 "currency": {"type": "string"},
                 "since": {"type": "integer", "description": "Unix ms"},
                 "limit": {"type": "integer"},
@@ -99,13 +75,6 @@ TOOL_DEFINITIONS: List[Dict[str, Any]] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "exchange_id": {"type": "string"},
-                "api_key": {"type": "string"},
-                "secret": {"type": "string"},
-                "password": {"type": "string"},
-                "api_domain": {"type": "string"},
-                "proxy": {"type": "string"},
-                "sandbox": {"type": "boolean"},
                 "currency": {"type": "string"},
                 "since": {"type": "integer", "description": "Unix ms"},
                 "limit": {"type": "integer"},
@@ -120,13 +89,6 @@ TOOL_DEFINITIONS: List[Dict[str, Any]] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "exchange_id": {"type": "string"},
-                "api_key": {"type": "string"},
-                "secret": {"type": "string"},
-                "password": {"type": "string"},
-                "api_domain": {"type": "string"},
-                "proxy": {"type": "string"},
-                "sandbox": {"type": "boolean"},
                 "symbol": {"type": "string"},
                 "type": {"type": "string", "description": "market or limit"},
                 "side": {"type": "string", "description": "buy or sell"},
@@ -143,13 +105,6 @@ TOOL_DEFINITIONS: List[Dict[str, Any]] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "exchange_id": {"type": "string"},
-                "api_key": {"type": "string"},
-                "secret": {"type": "string"},
-                "password": {"type": "string"},
-                "api_domain": {"type": "string"},
-                "proxy": {"type": "string"},
-                "sandbox": {"type": "boolean"},
                 "order_id": {"type": "string"},
                 "symbol": {"type": "string"},
                 "params": {"type": "object"},
@@ -163,13 +118,6 @@ TOOL_DEFINITIONS: List[Dict[str, Any]] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "exchange_id": {"type": "string"},
-                "api_key": {"type": "string"},
-                "secret": {"type": "string"},
-                "password": {"type": "string"},
-                "api_domain": {"type": "string"},
-                "proxy": {"type": "string"},
-                "sandbox": {"type": "boolean"},
                 "order_id": {"type": "string"},
                 "symbol": {"type": "string"},
                 "params": {"type": "object"},
@@ -183,6 +131,29 @@ TOOL_NAMES = {t["name"] for t in TOOL_DEFINITIONS}
 
 TRON_B58_RE = re.compile(r"^T[1-9A-HJ-NP-Za-km-z]{33}$")
 EVM_HEX_RE = re.compile(r"^0x[a-fA-F0-9]{40}$")
+
+
+def _parse_bool(value: Any, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+    return bool(value)
+
+
+def _parse_float(value: Any, field: str, allow_none: bool = False) -> Optional[float]:
+    if value in (None, ""):
+        if allow_none:
+            return None
+        raise ValidationError(f"{field} is required")
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        raise ValidationError(f"{field} must be a number") from None
 
 
 def _load_env_private(path: Path) -> dict:
@@ -207,24 +178,18 @@ def _require_ccxt() -> Any:
         raise ValidationError(f"ccxt not installed: {err}. Install with: pip install ccxt") from err
 
 
-def _resolve_creds(
-    exchange_id: Optional[str],
-    api_key: Optional[str],
-    secret: Optional[str],
-    password: Optional[str],
-    api_domain: Optional[str],
-    proxy: Optional[str],
-) -> Dict[str, Optional[str]]:
+def _resolve_creds() -> Dict[str, Optional[str]]:
     env = _load_env_private(Path(".env.private"))
-    exchange_id = exchange_id or env.get("EXCHANGE_ID") or settings.SETTINGS.__dict__.get("exchange_id")
-    api_key = api_key or env.get("EXCHANGE_API_KEY") or settings.SETTINGS.__dict__.get("exchange_api_key")
-    secret = secret or env.get("EXCHANGE_SECRET") or settings.SETTINGS.__dict__.get("exchange_secret")
-    password = password or env.get("EXCHANGE_PASSWORD") or settings.SETTINGS.__dict__.get("exchange_password")
-    api_domain = api_domain or env.get("EXCHANGE_API_DOMAIN") or settings.SETTINGS.__dict__.get("exchange_api_domain")
-    proxy = proxy or env.get("EXCHANGE_PROXY") or settings.SETTINGS.__dict__.get("exchange_proxy")
+    exchange_id = env.get("EXCHANGE_ID")
+    api_key = env.get("EXCHANGE_API_KEY")
+    secret = env.get("EXCHANGE_SECRET")
+    password = env.get("EXCHANGE_PASSWORD")
+    api_domain = env.get("EXCHANGE_API_DOMAIN")
+    proxy = env.get("EXCHANGE_PROXY")
+    sandbox = _parse_bool(env.get("EXCHANGE_SANDBOX"))
 
     if not exchange_id:
-        raise ValidationError("exchange_id is required (or set EXCHANGE_ID)")
+        raise ValidationError("EXCHANGE_ID not found in .env.private")
     return {
         "exchange_id": exchange_id,
         "api_key": api_key,
@@ -232,6 +197,7 @@ def _resolve_creds(
         "password": password,
         "api_domain": api_domain,
         "proxy": proxy,
+        "sandbox": sandbox,
     }
 
 
@@ -313,16 +279,8 @@ def _init_exchange(
     return ex
 
 
-def exchange_get_balance(
-    exchange_id: Optional[str] = None,
-    api_key: Optional[str] = None,
-    secret: Optional[str] = None,
-    password: Optional[str] = None,
-    api_domain: Optional[str] = None,
-    proxy: Optional[str] = None,
-    sandbox: bool = False,
-) -> Dict[str, Any]:
-    creds = _resolve_creds(exchange_id, api_key, secret, password, api_domain, proxy)
+def exchange_get_balance() -> Dict[str, Any]:
+    creds = _resolve_creds()
     ex = _init_exchange(
         creds["exchange_id"],
         creds["api_key"],
@@ -330,7 +288,7 @@ def exchange_get_balance(
         creds["password"],
         creds["api_domain"],
         creds["proxy"],
-        sandbox,
+        bool(creds.get("sandbox")),
     )
     try:
         return ex.fetch_balance()
@@ -339,21 +297,43 @@ def exchange_get_balance(
         raise UpstreamError(f"exchange_get_balance failed: {err}.{hint}") from err
 
 
-def exchange_get_deposit_address(
-    exchange_id: Optional[str],
-    api_key: Optional[str],
-    secret: Optional[str],
-    password: Optional[str],
-    api_domain: Optional[str],
-    proxy: Optional[str],
-    sandbox: bool,
-    currency: str,
-    network: Optional[str] = None,
-    params: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
+def _extract_currency_balance(balance: Dict[str, Any], currency: str) -> Dict[str, Any]:
+    code = (currency or "").upper()
+    if not code:
+        raise ValidationError("currency is required")
+
+    entry = balance.get(code)
+    if not isinstance(entry, dict):
+        entry = {}
+
+    total_map = balance.get("total") or {}
+    free_map = balance.get("free") or {}
+    used_map = balance.get("used") or {}
+
+    total = entry.get("total")
+    free = entry.get("free")
+    used = entry.get("used")
+
+    if total is None:
+        total = total_map.get(code)
+    if free is None:
+        free = free_map.get(code)
+    if used is None:
+        used = used_map.get(code)
+
+    return {
+        "currency": code,
+        "free": free,
+        "used": used,
+        "total": total,
+        "raw": entry,
+    }
+
+
+def exchange_get_asset_balance(currency: str | None = None) -> Dict[str, Any]:
     if not currency:
         raise ValidationError("currency is required")
-    creds = _resolve_creds(exchange_id, api_key, secret, password, api_domain, proxy)
+    creds = _resolve_creds()
     ex = _init_exchange(
         creds["exchange_id"],
         creds["api_key"],
@@ -361,7 +341,35 @@ def exchange_get_deposit_address(
         creds["password"],
         creds["api_domain"],
         creds["proxy"],
-        sandbox,
+        bool(creds.get("sandbox")),
+    )
+    try:
+        balance = ex.fetch_balance()
+        return {
+            "exchange": creds.get("exchange_id"),
+            "balance": _extract_currency_balance(balance, currency),
+        }
+    except Exception as err:  # noqa: BLE001
+        hint = _binance_hint(creds.get("exchange_id"))
+        raise UpstreamError(f"exchange_get_asset_balance failed: {err}.{hint}") from err
+
+
+def exchange_get_deposit_address(
+    currency: str,
+    network: Optional[str] = None,
+    params: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    if not currency:
+        raise ValidationError("currency is required")
+    creds = _resolve_creds()
+    ex = _init_exchange(
+        creds["exchange_id"],
+        creds["api_key"],
+        creds["secret"],
+        creds["password"],
+        creds["api_domain"],
+        creds["proxy"],
+        bool(creds.get("sandbox")),
     )
     try:
         extra = dict(params or {})
@@ -374,15 +382,8 @@ def exchange_get_deposit_address(
 
 
 def exchange_withdraw(
-    exchange_id: Optional[str],
-    api_key: Optional[str],
-    secret: Optional[str],
-    password: Optional[str],
-    api_domain: Optional[str],
-    proxy: Optional[str],
-    sandbox: bool,
     currency: str,
-    amount: float,
+    amount: float | int | str,
     address: str,
     tag: Optional[str] = None,
     network: Optional[str] = None,
@@ -392,7 +393,10 @@ def exchange_withdraw(
         raise ValidationError("currency is required")
     if not address:
         raise ValidationError("address is required")
-    creds = _resolve_creds(exchange_id, api_key, secret, password, api_domain, proxy)
+    amount_value = _parse_float(amount, "amount")
+    if amount_value <= 0:
+        raise ValidationError("amount must be > 0")
+    creds = _resolve_creds()
     ex = _init_exchange(
         creds["exchange_id"],
         creds["api_key"],
@@ -400,7 +404,7 @@ def exchange_withdraw(
         creds["password"],
         creds["api_domain"],
         creds["proxy"],
-        sandbox,
+        bool(creds.get("sandbox")),
     )
     try:
         inferred = None
@@ -411,7 +415,7 @@ def exchange_withdraw(
         extra = dict(params or {})
         if network:
             extra.setdefault("network", network)
-        result = ex.withdraw(currency, amount, address, tag, extra)
+        result = ex.withdraw(currency, amount_value, address, tag, extra)
         if inferred and isinstance(result, dict):
             result["inferredNetwork"] = inferred
         return result
@@ -421,19 +425,12 @@ def exchange_withdraw(
 
 
 def exchange_fetch_withdrawals(
-    exchange_id: Optional[str],
-    api_key: Optional[str],
-    secret: Optional[str],
-    password: Optional[str],
-    api_domain: Optional[str],
-    proxy: Optional[str],
-    sandbox: bool,
     currency: Optional[str] = None,
     since: Optional[int] = None,
     limit: Optional[int] = None,
     params: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    creds = _resolve_creds(exchange_id, api_key, secret, password, api_domain, proxy)
+    creds = _resolve_creds()
     ex = _init_exchange(
         creds["exchange_id"],
         creds["api_key"],
@@ -441,7 +438,7 @@ def exchange_fetch_withdrawals(
         creds["password"],
         creds["api_domain"],
         creds["proxy"],
-        sandbox,
+        bool(creds.get("sandbox")),
     )
     try:
         return {
@@ -454,19 +451,12 @@ def exchange_fetch_withdrawals(
 
 
 def exchange_fetch_deposits(
-    exchange_id: Optional[str],
-    api_key: Optional[str],
-    secret: Optional[str],
-    password: Optional[str],
-    api_domain: Optional[str],
-    proxy: Optional[str],
-    sandbox: bool,
     currency: Optional[str] = None,
     since: Optional[int] = None,
     limit: Optional[int] = None,
     params: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    creds = _resolve_creds(exchange_id, api_key, secret, password, api_domain, proxy)
+    creds = _resolve_creds()
     ex = _init_exchange(
         creds["exchange_id"],
         creds["api_key"],
@@ -474,7 +464,7 @@ def exchange_fetch_deposits(
         creds["password"],
         creds["api_domain"],
         creds["proxy"],
-        sandbox,
+        bool(creds.get("sandbox")),
     )
     try:
         return {
@@ -487,21 +477,20 @@ def exchange_fetch_deposits(
 
 
 def exchange_create_order(
-    exchange_id: Optional[str],
-    api_key: Optional[str],
-    secret: Optional[str],
-    password: Optional[str],
-    api_domain: Optional[str],
-    proxy: Optional[str],
-    sandbox: bool,
     symbol: str,
     type: str,
     side: str,
-    amount: float,
-    price: Optional[float] = None,
+    amount: float | int | str,
+    price: Optional[float | int | str] = None,
     params: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    creds = _resolve_creds(exchange_id, api_key, secret, password, api_domain, proxy)
+    amount_value = _parse_float(amount, "amount")
+    if amount_value <= 0:
+        raise ValidationError("amount must be > 0")
+    price_value = _parse_float(price, "price", allow_none=True)
+    if price_value is not None and price_value <= 0:
+        raise ValidationError("price must be > 0")
+    creds = _resolve_creds()
     ex = _init_exchange(
         creds["exchange_id"],
         creds["api_key"],
@@ -509,28 +498,21 @@ def exchange_create_order(
         creds["password"],
         creds["api_domain"],
         creds["proxy"],
-        sandbox,
+        bool(creds.get("sandbox")),
     )
     try:
-        return ex.create_order(symbol, type, side, amount, price, params or {})
+        return ex.create_order(symbol, type, side, amount_value, price_value, params or {})
     except Exception as err:  # noqa: BLE001
         hint = _binance_hint(creds.get("exchange_id"))
         raise UpstreamError(f"exchange_create_order failed: {err}.{hint}") from err
 
 
 def exchange_cancel_order(
-    exchange_id: Optional[str],
-    api_key: Optional[str],
-    secret: Optional[str],
-    password: Optional[str],
-    api_domain: Optional[str],
-    proxy: Optional[str],
-    sandbox: bool,
     order_id: str,
     symbol: Optional[str] = None,
     params: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    creds = _resolve_creds(exchange_id, api_key, secret, password, api_domain, proxy)
+    creds = _resolve_creds()
     ex = _init_exchange(
         creds["exchange_id"],
         creds["api_key"],
@@ -538,7 +520,7 @@ def exchange_cancel_order(
         creds["password"],
         creds["api_domain"],
         creds["proxy"],
-        sandbox,
+        bool(creds.get("sandbox")),
     )
     try:
         return ex.cancel_order(order_id, symbol, params or {})
@@ -548,18 +530,11 @@ def exchange_cancel_order(
 
 
 def exchange_fetch_order(
-    exchange_id: Optional[str],
-    api_key: Optional[str],
-    secret: Optional[str],
-    password: Optional[str],
-    api_domain: Optional[str],
-    proxy: Optional[str],
-    sandbox: bool,
     order_id: str,
     symbol: Optional[str] = None,
     params: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    creds = _resolve_creds(exchange_id, api_key, secret, password, api_domain, proxy)
+    creds = _resolve_creds()
     ex = _init_exchange(
         creds["exchange_id"],
         creds["api_key"],
@@ -567,7 +542,7 @@ def exchange_fetch_order(
         creds["password"],
         creds["api_domain"],
         creds["proxy"],
-        sandbox,
+        bool(creds.get("sandbox")),
     )
     try:
         return ex.fetch_order(order_id, symbol, params or {})
@@ -579,39 +554,19 @@ def exchange_fetch_order(
 def call_tool(name: str, args: Optional[Dict[str, Any]]) -> Any:
     args = args or {}
     if name == "exchange_get_balance":
-        return exchange_get_balance(
-            exchange_id=args.get("exchange_id"),
-            api_key=args.get("api_key"),
-            secret=args.get("secret"),
-            password=args.get("password"),
-            api_domain=args.get("api_domain"),
-            proxy=args.get("proxy"),
-            sandbox=bool(args.get("sandbox")),
-        )
+        return exchange_get_balance()
+    if name == "exchange_get_asset_balance":
+        return exchange_get_asset_balance(currency=args.get("currency"))
     if name == "exchange_get_deposit_address":
         return exchange_get_deposit_address(
-            exchange_id=args.get("exchange_id"),
-            api_key=args.get("api_key"),
-            secret=args.get("secret"),
-            password=args.get("password"),
-            api_domain=args.get("api_domain"),
-            proxy=args.get("proxy"),
-            sandbox=bool(args.get("sandbox")),
             currency=args.get("currency"),
             network=args.get("network"),
             params=args.get("params"),
         )
     if name == "exchange_withdraw":
         return exchange_withdraw(
-            exchange_id=args.get("exchange_id"),
-            api_key=args.get("api_key"),
-            secret=args.get("secret"),
-            password=args.get("password"),
-            api_domain=args.get("api_domain"),
-            proxy=args.get("proxy"),
-            sandbox=bool(args.get("sandbox")),
             currency=args.get("currency"),
-            amount=float(args.get("amount")),
+            amount=args.get("amount"),
             address=args.get("address"),
             tag=args.get("tag"),
             network=args.get("network"),
@@ -619,13 +574,6 @@ def call_tool(name: str, args: Optional[Dict[str, Any]]) -> Any:
         )
     if name == "exchange_fetch_withdrawals":
         return exchange_fetch_withdrawals(
-            exchange_id=args.get("exchange_id"),
-            api_key=args.get("api_key"),
-            secret=args.get("secret"),
-            password=args.get("password"),
-            api_domain=args.get("api_domain"),
-            proxy=args.get("proxy"),
-            sandbox=bool(args.get("sandbox")),
             currency=args.get("currency"),
             since=args.get("since"),
             limit=args.get("limit"),
@@ -633,13 +581,6 @@ def call_tool(name: str, args: Optional[Dict[str, Any]]) -> Any:
         )
     if name == "exchange_fetch_deposits":
         return exchange_fetch_deposits(
-            exchange_id=args.get("exchange_id"),
-            api_key=args.get("api_key"),
-            secret=args.get("secret"),
-            password=args.get("password"),
-            api_domain=args.get("api_domain"),
-            proxy=args.get("proxy"),
-            sandbox=bool(args.get("sandbox")),
             currency=args.get("currency"),
             since=args.get("since"),
             limit=args.get("limit"),
@@ -647,42 +588,21 @@ def call_tool(name: str, args: Optional[Dict[str, Any]]) -> Any:
         )
     if name == "exchange_create_order":
         return exchange_create_order(
-            exchange_id=args.get("exchange_id"),
-            api_key=args.get("api_key"),
-            secret=args.get("secret"),
-            password=args.get("password"),
-            api_domain=args.get("api_domain"),
-            proxy=args.get("proxy"),
-            sandbox=bool(args.get("sandbox")),
             symbol=args.get("symbol"),
             type=args.get("type"),
             side=args.get("side"),
-            amount=float(args.get("amount")),
+            amount=args.get("amount"),
             price=args.get("price"),
             params=args.get("params"),
         )
     if name == "exchange_cancel_order":
         return exchange_cancel_order(
-            exchange_id=args.get("exchange_id"),
-            api_key=args.get("api_key"),
-            secret=args.get("secret"),
-            password=args.get("password"),
-            api_domain=args.get("api_domain"),
-            proxy=args.get("proxy"),
-            sandbox=bool(args.get("sandbox")),
             order_id=args.get("order_id"),
             symbol=args.get("symbol"),
             params=args.get("params"),
         )
     if name == "exchange_fetch_order":
         return exchange_fetch_order(
-            exchange_id=args.get("exchange_id"),
-            api_key=args.get("api_key"),
-            secret=args.get("secret"),
-            password=args.get("password"),
-            api_domain=args.get("api_domain"),
-            proxy=args.get("proxy"),
-            sandbox=bool(args.get("sandbox")),
             order_id=args.get("order_id"),
             symbol=args.get("symbol"),
             params=args.get("params"),
@@ -692,64 +612,25 @@ def call_tool(name: str, args: Optional[Dict[str, Any]]) -> Any:
 
 def register_mcp_tools(mcp: Any) -> None:
     @mcp.tool(name="exchange_get_balance", description="Get balances from an exchange via CCXT.")
-    def tool_exchange_get_balance(
-        exchange_id: str | None = None,
-        api_key: str | None = None,
-        secret: str | None = None,
-        password: str | None = None,
-        api_domain: str | None = None,
-        proxy: str | None = None,
-        sandbox: bool = False,
-    ) -> dict:
-        return safety.enrich(
-            exchange_get_balance(
-                exchange_id=exchange_id,
-                api_key=api_key,
-                secret=secret,
-                password=password,
-                api_domain=api_domain,
-                proxy=proxy,
-                sandbox=sandbox,
-            )
-        )
+    def tool_exchange_get_balance() -> dict:
+        return safety.enrich(exchange_get_balance())
+
+    @mcp.tool(name="exchange_get_asset_balance", description="Get single-currency balance via CCXT.")
+    def tool_exchange_get_asset_balance(currency: str | None = None) -> dict:
+        return safety.enrich(exchange_get_asset_balance(currency=currency))
 
     @mcp.tool(name="exchange_get_deposit_address", description="Get deposit address via CCXT.")
     def tool_exchange_get_deposit_address(
-        exchange_id: str | None,
-        api_key: str | None,
-        secret: str | None,
-        password: str | None,
-        api_domain: str | None,
-        proxy: str | None,
-        sandbox: bool,
         currency: str,
         network: str | None = None,
         params: dict | None = None,
     ) -> dict:
         return safety.enrich(
-            exchange_get_deposit_address(
-                exchange_id=exchange_id,
-                api_key=api_key,
-                secret=secret,
-                password=password,
-                api_domain=api_domain,
-                proxy=proxy,
-                sandbox=sandbox,
-                currency=currency,
-                network=network,
-                params=params,
-            )
+            exchange_get_deposit_address(currency=currency, network=network, params=params)
         )
 
     @mcp.tool(name="exchange_withdraw", description="Withdraw funds via CCXT.")
     def tool_exchange_withdraw(
-        exchange_id: str | None,
-        api_key: str | None,
-        secret: str | None,
-        password: str | None,
-        api_domain: str | None,
-        proxy: str | None,
-        sandbox: bool,
         currency: str,
         amount: float,
         address: str,
@@ -759,13 +640,6 @@ def register_mcp_tools(mcp: Any) -> None:
     ) -> dict:
         return safety.enrich(
             exchange_withdraw(
-                exchange_id=exchange_id,
-                api_key=api_key,
-                secret=secret,
-                password=password,
-                api_domain=api_domain,
-                proxy=proxy,
-                sandbox=sandbox,
                 currency=currency,
                 amount=amount,
                 address=address,
@@ -777,73 +651,28 @@ def register_mcp_tools(mcp: Any) -> None:
 
     @mcp.tool(name="exchange_fetch_withdrawals", description="Fetch withdrawals via CCXT.")
     def tool_exchange_fetch_withdrawals(
-        exchange_id: str | None,
-        api_key: str | None,
-        secret: str | None,
-        password: str | None,
-        api_domain: str | None,
-        proxy: str | None,
-        sandbox: bool,
         currency: str | None = None,
         since: int | None = None,
         limit: int | None = None,
         params: dict | None = None,
     ) -> dict:
         return safety.enrich(
-            exchange_fetch_withdrawals(
-                exchange_id=exchange_id,
-                api_key=api_key,
-                secret=secret,
-                password=password,
-                api_domain=api_domain,
-                proxy=proxy,
-                sandbox=sandbox,
-                currency=currency,
-                since=since,
-                limit=limit,
-                params=params,
-            )
+            exchange_fetch_withdrawals(currency=currency, since=since, limit=limit, params=params)
         )
 
     @mcp.tool(name="exchange_fetch_deposits", description="Fetch deposits via CCXT.")
     def tool_exchange_fetch_deposits(
-        exchange_id: str | None,
-        api_key: str | None,
-        secret: str | None,
-        password: str | None,
-        api_domain: str | None,
-        proxy: str | None,
-        sandbox: bool,
         currency: str | None = None,
         since: int | None = None,
         limit: int | None = None,
         params: dict | None = None,
     ) -> dict:
         return safety.enrich(
-            exchange_fetch_deposits(
-                exchange_id=exchange_id,
-                api_key=api_key,
-                secret=secret,
-                password=password,
-                api_domain=api_domain,
-                proxy=proxy,
-                sandbox=sandbox,
-                currency=currency,
-                since=since,
-                limit=limit,
-                params=params,
-            )
+            exchange_fetch_deposits(currency=currency, since=since, limit=limit, params=params)
         )
 
     @mcp.tool(name="exchange_create_order", description="Create an order via CCXT.")
     def tool_exchange_create_order(
-        exchange_id: str | None,
-        api_key: str | None,
-        secret: str | None,
-        password: str | None,
-        api_domain: str | None,
-        proxy: str | None,
-        sandbox: bool,
         symbol: str,
         type: str,
         side: str,
@@ -853,13 +682,6 @@ def register_mcp_tools(mcp: Any) -> None:
     ) -> dict:
         return safety.enrich(
             exchange_create_order(
-                exchange_id=exchange_id,
-                api_key=api_key,
-                secret=secret,
-                password=password,
-                api_domain=api_domain,
-                proxy=proxy,
-                sandbox=sandbox,
                 symbol=symbol,
                 type=type,
                 side=side,
@@ -871,56 +693,20 @@ def register_mcp_tools(mcp: Any) -> None:
 
     @mcp.tool(name="exchange_cancel_order", description="Cancel an order via CCXT.")
     def tool_exchange_cancel_order(
-        exchange_id: str | None,
-        api_key: str | None,
-        secret: str | None,
-        password: str | None,
-        api_domain: str | None,
-        proxy: str | None,
-        sandbox: bool,
         order_id: str,
         symbol: str | None = None,
         params: dict | None = None,
     ) -> dict:
         return safety.enrich(
-            exchange_cancel_order(
-                exchange_id=exchange_id,
-                api_key=api_key,
-                secret=secret,
-                password=password,
-                api_domain=api_domain,
-                proxy=proxy,
-                sandbox=sandbox,
-                order_id=order_id,
-                symbol=symbol,
-                params=params,
-            )
+            exchange_cancel_order(order_id=order_id, symbol=symbol, params=params)
         )
 
     @mcp.tool(name="exchange_fetch_order", description="Fetch an order via CCXT.")
     def tool_exchange_fetch_order(
-        exchange_id: str | None,
-        api_key: str | None,
-        secret: str | None,
-        password: str | None,
-        api_domain: str | None,
-        proxy: str | None,
-        sandbox: bool,
         order_id: str,
         symbol: str | None = None,
         params: dict | None = None,
     ) -> dict:
         return safety.enrich(
-            exchange_fetch_order(
-                exchange_id=exchange_id,
-                api_key=api_key,
-                secret=secret,
-                password=password,
-                api_domain=api_domain,
-                proxy=proxy,
-                sandbox=sandbox,
-                order_id=order_id,
-                symbol=symbol,
-                params=params,
-            )
+            exchange_fetch_order(order_id=order_id, symbol=symbol, params=params)
         )

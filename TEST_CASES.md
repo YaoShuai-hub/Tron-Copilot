@@ -258,27 +258,31 @@ python3 -c "from tron_mcp import tools; print(tools.call_tool('get_orderbook', {
 # Set credentials in .env.private (EXCHANGE_ID / EXCHANGE_API_KEY / EXCHANGE_SECRET / EXCHANGE_PASSWORD)
 # Optional for binance (域名替换): EXCHANGE_API_DOMAIN=api1.binance.com
 # Optional for binance (代理): EXCHANGE_PROXY=http://127.0.0.1:7890
+# Optional: EXCHANGE_SANDBOX=true
 
 # get balance
-python3 -c "from tron_mcp import tools; print(tools.call_tool('exchange_get_balance', {'exchange_id':'binance'}))"
+python3 -c "from tron_mcp import tools; print(tools.call_tool('exchange_get_balance', {}))"
+
+# get single-asset balance (example: USDT)
+python3 -c "from tron_mcp import tools; print(tools.call_tool('exchange_get_asset_balance', {'currency':'USDT'}))"
 
 # get deposit address (example: USDT TRC20)
-python3 -c "from tron_mcp import tools; print(tools.call_tool('exchange_get_deposit_address', {'exchange_id':'binance','currency':'USDT','network':'TRC20'}))"
+python3 -c "from tron_mcp import tools; print(tools.call_tool('exchange_get_deposit_address', {'currency':'USDT','network':'TRC20'}))"
 
 # create order (example, may require sandbox on some exchanges)
-python3 -c "from tron_mcp import tools; print(tools.call_tool('exchange_create_order', {'exchange_id':'binance','symbol':'BTC/USDT','type':'market','side':'buy','amount':0.001}))"
+python3 -c "from tron_mcp import tools; print(tools.call_tool('exchange_create_order', {'symbol':'BTC/USDT','type':'market','side':'buy','amount':0.001}))"
 
 # withdraw (DANGEROUS, requires whitelist/2FA on most exchanges)
-python3 -c "from tron_mcp import tools; print(tools.call_tool('exchange_withdraw', {'exchange_id':'binance','currency':'USDT','amount':1,'address':'YOUR_ADDRESS','network':'TRC20'}))"
+python3 -c "from tron_mcp import tools; print(tools.call_tool('exchange_withdraw', {'currency':'USDT','amount':1,'address':'YOUR_ADDRESS','network':'TRC20'}))"
 
 # fetch withdrawals
-python3 -c "from tron_mcp import tools; print(tools.call_tool('exchange_fetch_withdrawals', {'exchange_id':'binance','currency':'USDT','limit':5}))"
+python3 -c "from tron_mcp import tools; print(tools.call_tool('exchange_fetch_withdrawals', {'currency':'USDT','limit':5}))"
 
 # fetch deposits
-python3 -c "from tron_mcp import tools; print(tools.call_tool('exchange_fetch_deposits', {'exchange_id':'binance','currency':'USDT','limit':5}))"
+python3 -c "from tron_mcp import tools; print(tools.call_tool('exchange_fetch_deposits', {'currency':'USDT','limit':5}))"
 
 # withdraw (auto infer network for TRON address if network not provided)
-python3 -c "from tron_mcp import tools; print(tools.call_tool('exchange_withdraw', {'exchange_id':'binance','currency':'USDT','amount':1,'address':'TXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX'}))"
+python3 -c "from tron_mcp import tools; print(tools.call_tool('exchange_withdraw', {'currency':'USDT','amount':1,'address':'TXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX'}))"
 ```
 ## 5) MCP JSON-RPC Example
 
