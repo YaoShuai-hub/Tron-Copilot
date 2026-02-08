@@ -23,9 +23,10 @@ from tron_mcp.utils.logging_setup import setup_logging
 log = logging.getLogger("telegram_bot")
 
 SYSTEM_TOOL_POLICY = (
-    "If the available tools cannot solve the task, you may create a new custom tool by "
+    "If the available tools cannot solve the task, prioritize creating a custom tool by "
     "calling custom_tools_write with a Python module (define TOOL_DEFINITIONS and call_tool), "
     "then call custom_tools_reload, and then use the new tool. "
+    "If a tool with the same name already exists, call it first. "
     "If the tool is buggy, iteratively rewrite it and reload."
 )
 

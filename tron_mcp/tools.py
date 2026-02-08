@@ -6,6 +6,10 @@ from dataclasses import dataclass, asdict
 from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, List, Optional
 import time
+import json
+import asyncio
+import importlib.util
+from pathlib import Path
 
 from . import settings
 from .extensions import tx_assistant, trc20_assistant, agent_pipeline, local_signer
@@ -160,7 +164,211 @@ TOOL_DEFINITIONS: List[Tool] = [
             "required": ["address_a", "address_b", "start_ts_ms"],
         },
     ),
+    Tool(
+        name="get_wallet_balance",
+        description="Get TRON wallet portfolio summary (TRX + TRC20) with USD valuation.",
+        inputSchema={
+            "type": "object",
+            "properties": {"address": {"type": "string", "description": "TRON Base58 address starting with T"}},
+            "required": ["address"],
+        },
+    ),
+    Tool(
+        name="get_token_price",
+        description="Get token price in USD by symbol or TRC20 contract address.",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "symbol": {"type": "string", "description": "Token symbol (TRX/USDT) or TRC20 contract address"}
+            },
+            "required": ["symbol"],
+        },
+    ),
+    Tool(
+        name="get_token_security",
+        description="Lightweight token contract security check (simulated).",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "token_address": {"type": "string", "description": "TRON contract address starting with T"}
+            },
+            "required": ["token_address"],
+        },
+    ),
+    Tool(
+        name="simulate_transaction",
+        description="Simulate a transaction by raw hex (lightweight, simulated).",
+        inputSchema={
+            "type": "object",
+            "properties": {"transaction_hex": {"type": "string", "description": "Raw transaction hex"}},
+            "required": ["transaction_hex"],
+        },
+    ),
+    Tool(
+        name="swap_tokens",
+        description="Build an unsigned swap transaction on SunSwap V2.",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "address": {"type": "string", "description": "Sender wallet address"},
+                "token_in": {"type": "string", "description": "Input token symbol or address, or TRX"},
+                "token_out": {"type": "string", "description": "Output token symbol or address, or TRX"},
+                "amount_in": {"type": "number", "description": "Amount of input token"},
+                "slippage": {"type": "number", "description": "Slippage tolerance, percent"},
+            },
+            "required": ["address", "token_in", "token_out", "amount_in"],
+        },
+    ),
+    Tool(
+        name="rent_energy",
+        description="Estimate energy rental cost and recommendations.",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "amount": {"type": "integer", "description": "Energy amount to rent"},
+                "duration_days": {"type": "integer", "description": "Rental duration in days"},
+            },
+            "required": ["amount"],
+        },
+    ),
+    Tool(
+        name="check_address_security",
+        description="Check security risk level of a TRON address.",
+        inputSchema={
+            "type": "object",
+            "properties": {"address": {"type": "string", "description": "TRON address"}},
+            "required": ["address"],
+        },
+    ),
+    Tool(
+        name="record_transfer",
+        description="Record transfer in address book (lookup or save recipient).",
+        inputSchema={
+            "type": "object",
+            "properties": {"to_address": {"type": "string", "description": "Recipient TRON address"}},
+            "required": ["to_address"],
+        },
+    ),
+    Tool(
+        name="check_malicious",
+        description="Check if address is malicious on TronScan blacklist.",
+        inputSchema={
+            "type": "object",
+            "properties": {"address": {"type": "string", "description": "TRON address"}},
+            "required": ["address"],
+        },
+    ),
+    Tool(
+        name="calculate_energy",
+        description="Estimate energy usage for TRC20 transfers.",
+        inputSchema={
+            "type": "object",
+            "properties": {"token": {"type": "string", "description": "Token symbol (e.g., USDT)"}},
+            "required": ["token"],
+        },
+    ),
+    Tool(
+        name="build_transfer",
+        description="Build unsigned transfer transaction (TRX or TRC20).",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "from_address": {"type": "string", "description": "Sender TRON address"},
+                "to_address": {"type": "string", "description": "Recipient TRON address"},
+                "token": {"type": "string", "description": "Token symbol or contract"},
+                "amount": {"type": "number", "description": "Amount to transfer"},
+                "memo": {"type": "string", "description": "Optional memo"},
+            },
+            "required": ["from_address", "to_address", "token", "amount"],
+        },
+    ),
+    Tool(
+        name="transfer_tokens",
+        description="Quick transfer (combines steps and builds unsigned tx).",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "from_address": {"type": "string", "description": "Sender TRON address"},
+                "to_address": {"type": "string", "description": "Recipient TRON address"},
+                "token": {"type": "string", "description": "Token symbol or contract"},
+                "amount": {"type": "number", "description": "Amount to transfer"},
+                "memo": {"type": "string", "description": "Optional memo"},
+            },
+            "required": ["from_address", "to_address", "token", "amount"],
+        },
+    ),
+    Tool(
+        name="analyze_error",
+        description="Analyze blockchain/transaction errors.",
+        inputSchema={
+            "type": "object",
+            "properties": {"error_message": {"type": "string", "description": "Error message"}},
+            "required": ["error_message"],
+        },
+    ),
+    Tool(
+        name="manage_skill",
+        description="Save or delete a generated skill.",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "skill_name": {"type": "string", "description": "Skill name"},
+                "action": {"type": "string", "enum": ["save", "delete"]},
+            },
+            "required": ["skill_name", "action"],
+        },
+    ),
 ]
+
+_SKILL_CACHE: Dict[str, Any] = {}
+
+
+def _run_async(coro: Any) -> Any:
+    if not asyncio.iscoroutine(coro):
+        return coro
+    try:
+        return asyncio.run(coro)
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(coro)
+        finally:
+            loop.close()
+
+
+def _load_skill_function(relative_path: str, func_name: str) -> Any:
+    key = f"{relative_path}:{func_name}"
+    if key in _SKILL_CACHE:
+        return _SKILL_CACHE[key]
+    project_root = Path(__file__).resolve().parents[1]
+    module_path = project_root / relative_path
+    spec = importlib.util.spec_from_file_location(f"compat_{func_name}", module_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)  # type: ignore[union-attr]
+    func = getattr(module, func_name)
+    _SKILL_CACHE[key] = func
+    return func
+
+
+def _load_wrapper_function(func_name: str) -> Any:
+    return _load_skill_function("src/tool_wrappers.py", func_name)
+
+
+def _load_personal_skills_tool_defs() -> List[Dict[str, Any]]:
+    tools: List[Dict[str, Any]] = []
+    skills_dir = Path(__file__).resolve().parents[1] / "personal-skills"
+    if not skills_dir.exists():
+        return tools
+    for skill_dir in skills_dir.iterdir():
+        if not skill_dir.is_dir():
+            continue
+        tool_json = skill_dir / "skill.json"
+        if tool_json.exists():
+            try:
+                tools.append(json.loads(tool_json.read_text(encoding="utf-8")))
+            except Exception:
+                continue
+    return tools
 
 
 def list_tools() -> Dict[str, Any]:
@@ -181,6 +389,7 @@ def list_tools() -> Dict[str, Any]:
     tools.extend(exchange_adapter.TOOL_DEFINITIONS)
     tools.extend(risk_monitor.TOOL_DEFINITIONS)
     tools.extend(onchain_monitor.TOOL_DEFINITIONS)
+    tools.extend(_load_personal_skills_tool_defs())
     return {"tools": tools}
 
 
@@ -869,6 +1078,261 @@ def get_address_labels(address: str) -> Dict[str, Any]:
     }
 
 
+def get_wallet_balance(address: str) -> Dict[str, Any]:
+    """Portfolio summary using existing TRONSCAN + CoinGecko pipeline."""
+    data = get_total_value(address, currency="usd")
+    if not isinstance(data, dict):
+        return {"address": address, "error": "Unexpected response"}
+    return {
+        "address": address,
+        "currency": data.get("currency", "usd"),
+        "totalValue": data.get("totalValue"),
+        "items": data.get("items", []),
+        "missingPrices": data.get("missingPrices", []),
+        "pricingSource": data.get("pricingSource"),
+        "source": data.get("source", "TRONSCAN"),
+    }
+
+
+def get_token_price(symbol: str) -> Dict[str, Any]:
+    """Token price in USD by symbol or contract address."""
+    symbol = (symbol or "").strip()
+    if not symbol:
+        return {"error": "symbol is required"}
+    symbol_upper = symbol.upper()
+
+    if symbol_upper == "TRX":
+        data = fetch_trx_price("usd")
+        price = data.get("tron", {}).get("usd")
+        return {"symbol": "TRX", "usd_price": price, "source": "CoinGecko", "raw": data}
+
+    if symbol_upper == "USDT":
+        return {"symbol": "USDT", "usd_price": 1.0, "source": "stablecoin"}
+
+    if symbol.startswith("T") and len(symbol) == 34:
+        data = fetch_tron_token_prices([symbol], "usd")
+        key = symbol.lower()
+        price = data.get(key, {}).get("usd") if isinstance(data, dict) else None
+        return {"symbol": symbol, "usd_price": price, "source": "CoinGecko", "raw": data}
+
+    return {"symbol": symbol, "usd_price": None, "error": "Unknown symbol; provide contract address."}
+
+
+def get_token_security(token_address: str) -> Dict[str, Any]:
+    """Simple token contract security hints (simulated)."""
+    known_safe = {
+        "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",  # USDT
+        "TN3W4H6rK2ce4vX9YnFQHwKENnHjoxb3m9",  # BTTC
+        "TSSMHYeV2uE9qYH95DqyoCuNCzEL1NvU3S",  # SUN
+    }
+    status = "SAFE" if token_address in known_safe else "UNKNOWN"
+    return {
+        "token_address": token_address,
+        "status": status,
+        "notes": "Simulated check; verify contract and audits before trading.",
+    }
+
+
+def simulate_transaction(transaction_hex: str) -> Dict[str, Any]:
+    """Simulated transaction check (placeholder)."""
+    if not transaction_hex:
+        return {"error": "transaction_hex is required"}
+    return {
+        "status": "SUCCESS",
+        "energy_estimate": 15000,
+        "bandwidth_estimate": 300,
+        "risk_check": "PASS",
+        "note": "Simulation only. Real execution depends on chain state.",
+    }
+
+
+def swap_tokens(
+    address: str,
+    token_in: str,
+    token_out: str,
+    amount_in: float,
+    slippage: float = 0.5,
+) -> Dict[str, Any]:
+    """Build unsigned SunSwap V2 swap transaction."""
+    build_swap_transaction = _load_skill_function(
+        "skills/swap-tokens/scripts/build_swap.py",
+        "build_swap_transaction",
+    )
+    return _run_async(build_swap_transaction(address, token_in, token_out, amount_in, slippage))
+
+
+def rent_energy(amount: int, duration_days: int = 3) -> Dict[str, Any]:
+    """Energy rental proposal (uses skill logic)."""
+    get_rental_proposal = _load_skill_function(
+        "skills/energy-rental/scripts/calculate_rental.py",
+        "get_rental_proposal",
+    )
+    return _run_async(get_rental_proposal(amount, duration_days))
+
+
+def check_address_security(address: str) -> Any:
+    tool_fn = _load_wrapper_function("tool_check_address_security")
+    return _run_async(tool_fn(address))
+
+
+def record_transfer(to_address: str) -> str:
+    get_contact_alias = _load_skill_function(
+        "skills/address-book/scripts/manage_contacts.py",
+        "get_contact_alias",
+    )
+    save_contact = _load_skill_function(
+        "skills/address-book/scripts/manage_contacts.py",
+        "save_contact",
+    )
+    alias = get_contact_alias(to_address)
+    contact_info = save_contact(to_address, alias=alias, increment_count=True)
+    transfer_count = contact_info.get("transfer_count", 1)
+    if alias:
+        return (
+            "📇 **地址簿记录**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"✅ 找到已保存联系人: **{alias}**\n"
+            f"📊 历史转账次数: **第 {transfer_count} 次**\n\n"
+            "→ 已知地址，安全性较高"
+        )
+    return (
+        "📇 **地址簿记录**\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "ℹ️ 新地址，首次转账\n"
+        "📊 已添加到地址簿\n\n"
+        f"💡 提示: 使用 `/save-contact {to_address[:8]}... <名称>` 可以添加别名"
+    )
+
+
+def check_malicious(address: str, network: str = "nile") -> str:
+    check_malicious_address = _load_skill_function(
+        "skills/malicious-address-detector/scripts/check_malicious.py",
+        "check_malicious_address",
+    )
+    result = _run_async(check_malicious_address(address, network))
+    if result.get("is_malicious"):
+        return (
+            "🚨 **恶意地址检测**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "❌ **危险: 此地址已被标记为恶意地址!**\n\n"
+            f"⚠️ 标签: {', '.join(result.get('tags', ['Scam']))}\n"
+            f"⚠️ 警告: {result.get('warnings', ['请勿向此地址转账'])[0]}\n\n"
+            "🛑 **强烈建议取消此次转账!**"
+        )
+    if result.get("risk_level") == "WARNING":
+        return (
+            "🚨 **恶意地址检测**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"⚠️ 需要注意: {result.get('warnings', [''])[0]}\n\n"
+            "→ 建议谨慎操作"
+        )
+    return (
+        "🚨 **恶意地址检测**\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "✅ 未发现恶意标签\n"
+        "📊 数据来源: TronScan\n\n"
+        "→ 可以继续下一步"
+    )
+
+
+def calculate_energy(token: str, network: str = "nile") -> str:
+    if token.upper() == "TRX":
+        return (
+            "⚡ **能量计算**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "ℹ️ TRX 转账不需要能量，只需带宽\n"
+            "📊 预计消耗: ~270 带宽\n\n"
+            "→ 无需租赁能量，可以直接转账"
+        )
+    get_rental_proposal = _load_skill_function(
+        "skills/energy-rental/scripts/calculate_rental.py",
+        "get_rental_proposal",
+    )
+    result = _run_async(get_rental_proposal(28000, 1, True))
+    if isinstance(result, dict) and result.get("error"):
+        return f"⚠️ 能量计算失败: {result['error']}"
+    burn_cost = result.get("burn_cost_trx", 0) if isinstance(result, dict) else 0
+    rec = result.get("recommendation", {}) if isinstance(result, dict) else {}
+    action = rec.get("action", "unknown")
+    output = (
+        f"⚡ **能量计算** ({token.upper()})\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "📊 预计消耗: ~28,000 能量\n\n"
+        "💰 成本对比:\n"
+        f"  燃烧 TRX: {burn_cost:.2f} TRX"
+    )
+    if isinstance(result, dict) and result.get("rental_options"):
+        best = result["rental_options"][0]
+        output += (
+            f"\n  租赁能量: {best['cost_trx']:.2f} TRX (节省 {best['savings_percent']:.0f}%)\n\n"
+            f"💡 建议: **{action.upper()}**"
+        )
+    return output
+
+
+def build_transfer(
+    from_address: str,
+    to_address: str,
+    token: str,
+    amount: float,
+    memo: str = "",
+    network: str = "nile",
+) -> Any:
+    if not from_address:
+        return "❌ Error: from_address is required for build_transfer."
+    tool_fn = _load_wrapper_function("tool_transfer_tokens")
+    return _run_async(tool_fn(from_address, to_address, token, amount, memo, network))
+
+
+def transfer_tokens(
+    from_address: str,
+    to_address: str,
+    token: str,
+    amount: float,
+    memo: str = "",
+    network: str = "nile",
+) -> Any:
+    if not from_address:
+        return "❌ Error: from_address is required for transfer_tokens."
+    tool_fn = _load_wrapper_function("tool_transfer_tokens")
+    return _run_async(tool_fn(from_address, to_address, token, amount, memo, network))
+
+
+def analyze_error(error_message: str) -> Any:
+    analyze_fn = _load_skill_function(
+        "skills/error-analysis/scripts/analyze_error.py",
+        "analyze_error",
+    )
+    return _run_async(analyze_fn(error_message))
+
+
+def manage_skill(skill_name: str, action: str) -> str:
+    import shutil
+    base_dir = Path(__file__).resolve().parents[1] / "personal-skills" / skill_name
+    if action == "delete":
+        if base_dir.exists():
+            shutil.rmtree(base_dir)
+            return f"🗑️ 技能 '{skill_name}' 已删除。"
+        return f"⚠️ 技能 '{skill_name}' 不存在。"
+    if action == "save":
+        if base_dir.exists():
+            return f"💾 技能 '{skill_name}' 已确认保存到个人技能库。"
+        return f"⚠️ 技能 '{skill_name}' 不存在，无法保存。"
+    return "⚠️ 未知操作，请使用 save 或 delete。"
+
+
+def _execute_personal_skill(tool_name: str, tool_args: Dict[str, Any]) -> Any:
+    skill_dir = Path(__file__).resolve().parents[1] / "personal-skills" / tool_name / "scripts" / "main.py"
+    if not skill_dir.exists():
+        raise ValidationError(f"Unknown tool name: {tool_name}")
+    spec = importlib.util.spec_from_file_location("personal_skill", skill_dir)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)  # type: ignore[union-attr]
+    if not hasattr(module, "execute_skill"):
+        raise ValidationError(f"Skill '{tool_name}' has no execute_skill function.")
+    return _run_async(module.execute_skill(**tool_args))
+
+
 def call_tool(name: str, args: Optional[Dict[str, Any]]) -> Any:
     """Dispatch a tool call by name with argument dict."""
     args = args or {}
@@ -895,6 +1359,54 @@ def call_tool(name: str, args: Optional[Dict[str, Any]]) -> Any:
             limit=args.get("limit", 50),
             max_pages=args.get("max_pages", 10),
         )
+    if name == "get_wallet_balance":
+        return get_wallet_balance(address=args.get("address"))
+    if name == "get_token_price":
+        return get_token_price(symbol=args.get("symbol"))
+    if name == "get_token_security":
+        return get_token_security(token_address=args.get("token_address"))
+    if name == "simulate_transaction":
+        return simulate_transaction(transaction_hex=args.get("transaction_hex"))
+    if name == "swap_tokens":
+        return swap_tokens(
+            address=args.get("address"),
+            token_in=args.get("token_in"),
+            token_out=args.get("token_out"),
+            amount_in=args.get("amount_in"),
+            slippage=args.get("slippage", 0.5),
+        )
+    if name == "rent_energy":
+        return rent_energy(amount=args.get("amount"), duration_days=args.get("duration_days", 3))
+    if name == "check_address_security":
+        return check_address_security(address=args.get("address"))
+    if name == "record_transfer":
+        return record_transfer(to_address=args.get("to_address"))
+    if name == "check_malicious":
+        return check_malicious(address=args.get("address"), network=args.get("network", "nile"))
+    if name == "calculate_energy":
+        return calculate_energy(token=args.get("token", "TRX"), network=args.get("network", "nile"))
+    if name == "build_transfer":
+        return build_transfer(
+            from_address=args.get("from_address"),
+            to_address=args.get("to_address"),
+            token=args.get("token", "TRX"),
+            amount=args.get("amount", 0),
+            memo=args.get("memo", ""),
+            network=args.get("network", "nile"),
+        )
+    if name == "transfer_tokens":
+        return transfer_tokens(
+            from_address=args.get("from_address"),
+            to_address=args.get("to_address"),
+            token=args.get("token", "TRX"),
+            amount=args.get("amount", 0),
+            memo=args.get("memo", ""),
+            network=args.get("network", "nile"),
+        )
+    if name == "analyze_error":
+        return analyze_error(error_message=args.get("error_message", ""))
+    if name == "manage_skill":
+        return manage_skill(skill_name=args.get("skill_name", ""), action=args.get("action", ""))
     if name in tx_assistant.TOOL_NAMES:
         return tx_assistant.call_tool(name, args)
     if name in trc20_assistant.TOOL_NAMES:
@@ -927,4 +1439,4 @@ def call_tool(name: str, args: Optional[Dict[str, Any]]) -> Any:
         return get_token_balance(address=args.get("address"), token=args.get("token"))
     if name == "get_total_value":
         return get_total_value(address=args.get("address"), currency=args.get("currency", "usd"))
-    raise ValidationError(f"Unknown tool name: {name}")
+    return _execute_personal_skill(name, args)

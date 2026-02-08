@@ -41,9 +41,9 @@ export const ChatMessage = memo(function ChatMessage({ message }: ChatMessagePro
             </div>
 
             {/* Message Content */}
-            <div className={`flex-1 max-w-3xl ${isUser ? 'text-right' : 'text-left'}`}>
+            <div className={`flex-1 max-w-3xl min-w-0 ${isUser ? 'text-right' : 'text-left'}`}>
                 <div className={`
-                    inline-block p-4 rounded-2xl
+                    inline-block p-4 rounded-2xl max-w-full break-words
                     ${isUser
                         ? 'bg-gradient-to-br from-purple-500/20 to-pink-600/20 backdrop-blur-xl border border-purple-500/30'
                         : 'glass-tron'
@@ -51,7 +51,7 @@ export const ChatMessage = memo(function ChatMessage({ message }: ChatMessagePro
                     group-hover:shadow-xl transition-all duration-300
                 `}>
                     {/* Text Content with Markdown Rendering */}
-                    <div className="text-gray-100 prose prose-invert prose-sm max-w-none">
+                    <div className="text-gray-100 prose prose-invert prose-sm max-w-none break-words whitespace-pre-wrap">
                         <ReactMarkdown
                             remarkPlugins={[remarkGfm]}
                             components={{

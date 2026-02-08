@@ -9,10 +9,12 @@ import json
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from config import Config
+from tron_mcp import tools as tron_tools
+from agents.telegram_bot import SYSTEM_TOOL_POLICY
 
 # Simple in-memory history for demo purposes (Single User)
 CONVERSATION_HISTORY = []
@@ -432,6 +434,49 @@ TOOLS = [
     }
 ]
 
+# --- Tool Compatibility (Telegram + Frontend) ---
+
+def _format_tools_for_openai(tools: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    formatted: List[Dict[str, Any]] = []
+    for tool in tools:
+        if "type" in tool and "function" in tool:
+            formatted.append(tool)
+            continue
+        formatted.append(
+            {
+                "type": "function",
+                "function": {
+                    "name": tool.get("name"),
+                    "description": tool.get("description", ""),
+                    "parameters": tool.get("inputSchema", {}) or {},
+                },
+            }
+        )
+    return formatted
+
+
+def get_llm_tools() -> List[Dict[str, Any]]:
+    return _format_tools_for_openai(tron_tools.list_tools()["tools"])
+
+
+def _normalize_tool_args(
+    tool_name: str,
+    tool_args: Dict[str, Any],
+    user_wallet: Optional[str],
+    network: str,
+) -> Dict[str, Any]:
+    args = dict(tool_args or {})
+    if tool_name in {"transfer_tokens", "build_transfer"}:
+        if user_wallet and not args.get("from_address"):
+            args["from_address"] = user_wallet
+        args.setdefault("network", network)
+    if tool_name in {"check_malicious", "calculate_energy"}:
+        args.setdefault("network", network)
+    if tool_name == "get_wallet_balance" and user_wallet and not args.get("address"):
+        args["address"] = user_wallet
+    return args
+
+
 # === Dynamic Skill Loading ===
 def load_personal_skills() -> List[Dict]:
     """Load skills dynamically from personal-skills directory."""
@@ -674,367 +719,14 @@ def get_all_tools() -> List[Dict]:
 async def execute_tool(tool_name: str, tool_args: Dict[str, Any], user_wallet: Optional[str], network: str = "nile") -> str:
     """Execute the tool requested by the LLM."""
     print(f"🔧 Tool Call: {tool_name} with args {tool_args} on network {network}")
-    
     try:
-        if tool_name == "get_wallet_balance":
-            address = tool_args.get("address") or user_wallet
-            if not address:
-                return "❌ Error: No wallet address provided and user is not connected."
-            return await tool_get_wallet_balance(address, network=network)
-
-        elif tool_name == "get_token_price":
-            symbol = tool_args.get("symbol", "TRX")
-            return await tool_get_token_price(symbol)
-
-        elif tool_name == "check_address_security":
-            address = tool_args.get("address")
-            if not address:
-                 return "❌ Error: No address provided for check."
-            return await tool_check_address_security(address, network=network)
-        
-        # === 转账工作流 Skills ===
-        elif tool_name == "record_transfer":
-            # Step 1: Record transfer in address book
-            to_address = tool_args.get("to_address")
-            if not to_address:
-                return "❌ Error: No recipient address provided."
-            
-            # Import and call the function
-            import sys
-            from pathlib import Path
-            skill_path = Path(__file__).resolve().parent.parent / "skills" / "address-book" / "scripts"
-            sys.path.insert(0, str(skill_path))
-            from manage_contacts import get_contact_alias, save_contact
-            
-            alias = get_contact_alias(to_address)
-            contact_info = save_contact(to_address, alias=alias, increment_count=True)
-            transfer_count = contact_info.get('transfer_count', 1)
-            
-            if alias:
-                return f"""📇 **地址簿记录**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅ 找到已保存联系人: **{alias}**
-📊 历史转账次数: **第 {transfer_count} 次**
-
-→ 已知地址，安全性较高"""
-            else:
-                return f"""📇 **地址簿记录**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-ℹ️ 新地址，首次转账
-📊 已添加到地址簿
-
-💡 提示: 使用 `/save-contact {to_address[:8]}... <名称>` 可以添加别名"""
-        
-        elif tool_name == "check_malicious":
-            # Step 2: Check malicious address
-            address = tool_args.get("address")
-            if not address:
-                return "❌ Error: No address provided."
-            
-            try:
-                import sys
-                from pathlib import Path
-                skill_path = Path(__file__).resolve().parent.parent / "skills" / "malicious-address-detector" / "scripts"
-                sys.path.insert(0, str(skill_path))
-                from check_malicious import check_malicious_address
-                result = await check_malicious_address(address, network)
-            except ImportError:
-                # Fallback if skill not available
-                result = {"is_malicious": False, "risk_level": "UNKNOWN", "warnings": ["Skill not available"]}
-            
-            if result.get('is_malicious'):
-                return f"""🚨 **恶意地址检测**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-❌ **危险: 此地址已被标记为恶意地址!**
-
-⚠️ 标签: {', '.join(result.get('tags', ['Scam']))}
-⚠️ 警告: {result.get('warnings', ['请勿向此地址转账'])[0]}
-
-🛑 **强烈建议取消此次转账!**"""
-            elif result.get('risk_level') == 'WARNING':
-                return f"""🚨 **恶意地址检测**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚠️ 需要注意: {result.get('warnings', [''])[0]}
-
-→ 建议谨慎操作"""
-            else:
-                return f"""🚨 **恶意地址检测**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅ 未发现恶意标签
-📊 数据来源: TronScan
-
-→ 可以继续下一步"""
-        
-        elif tool_name == "calculate_energy":
-            # Step 3: Calculate energy (TRC20 only)
-            token = tool_args.get("token", "TRX")
-            
-            if token.upper() == "TRX":
-                return f"""⚡ **能量计算**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-ℹ️ TRX 转账不需要能量，只需带宽
-📊 预计消耗: ~270 带宽
-
-→ 无需租赁能量，可以直接转账"""
-            
-            # TRC20 needs energy
-            try:
-                import sys
-                from pathlib import Path
-                skill_path = Path(__file__).resolve().parent.parent / "skills" / "energy-rental" / "scripts"
-                sys.path.insert(0, str(skill_path))
-                from calculate_rental import get_rental_proposal
-                result = await get_rental_proposal(28000, 1, network)
-                
-                if 'error' in result:
-                    return f"⚠️ 能量计算失败: {result['error']}"
-                
-                burn_cost = result.get('burn_cost_trx', 0)
-                rec = result.get('recommendation', {})
-                action = rec.get('action', 'unknown')
-                
-                output = f"""⚡ **能量计算** ({token.upper()})
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 预计消耗: ~28,000 能量
-
-💰 成本对比:
-  燃烧 TRX: {burn_cost:.2f} TRX"""
-                
-                if result.get('rental_options'):
-                    best = result['rental_options'][0]
-                    output += f"""
-  租赁能量: {best['cost_trx']:.2f} TRX (节省 {best['savings_percent']:.0f}%)
-
-💡 建议: **{action.upper()}**"""
-                
-                return output
-                
-            except ImportError:
-                return f"""⚡ **能量计算**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 {token.upper()} 转账需要约 28,000 能量
-💰 预计消耗: ~3 TRX
-
-→ 能量计算模块不可用，使用默认估算"""
-        
-        elif tool_name == "build_transfer":
-            # Step 4: Build the actual transfer
-            if not user_wallet:
-                return "⚠️ 请先连接钱包才能进行转账"
-            
-            return await tool_transfer_tokens(
-                from_address=user_wallet,
-                to_address=tool_args["to_address"],
-                token=tool_args.get("token", "TRX"),
-                amount=float(tool_args["amount"]),
-                network=network
-            )
-        
-        elif tool_name == "analyze_error":
-            # Analyze blockchain errors
-            error_msg = tool_args.get("error_message", "")
-            
-            try:
-                import sys
-                from pathlib import Path
-                skill_path = Path(__file__).resolve().parent.parent / "skills" / "error-analysis" / "scripts"
-                sys.path.insert(0, str(skill_path))
-                from analyze_error import analyze_error as ae
-                result = await ae(error_msg)
-                return f"""🔧 **错误分析**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-{result.get('analysis', '无法分析错误')}
-
-💡 建议:
-{chr(10).join(f'  {i+1}. {s}' for i, s in enumerate(result.get('suggestions', [])))}"""
-            except Exception as e:
-                return f"⚠️ 错误分析失败: {str(e)}"
-
-        elif tool_name == "transfer_tokens":
-            # For transfer, we rely on the LLM to extract to_address from the message
-            # The 'from_address' is the connected user_wallet
-            if not user_wallet:
-                return "⚠️ Please connect your wallet first to perform transfers."
-            
-            return await tool_transfer_tokens(
-                from_address=user_wallet,
-                to_address=tool_args["to_address"],
-                token=tool_args.get("token", "TRX"),
-                amount=float(tool_args["amount"]),
-                network=network
-            )
-        
-        # === Skill Generator ===
-        elif tool_name == "generate_skill":
-            requirement = tool_args.get("requirement", "")
-            skill_name = tool_args.get("skill_name", "").lower().replace(" ", "-")
-            
-            # Use the real skill generator module
-            try:
-                import sys
-                from pathlib import Path
-                
-                # Import generator module dynamically
-                generator_path = Path(__file__).resolve().parent.parent / "skills" / "skill-generator" / "scripts"
-                sys.path.insert(0, str(generator_path))
-                import generator
-                
-                # 1. Analyze requirement (Mocking existing skills list for now)
-                analysis = await generator.analyze_requirement(requirement, [])
-                
-                # Override suggested name if provided by LLM
-                final_skill_name = skill_name if skill_name else analysis['suggested_name']
-                
-                # 2. Generate Plan
-                plan = await generator.generate_skill_plan(requirement, final_skill_name, [])
-                
-                # 3. Generate Code (This will now load from templates if available)
-                generated_code = await generator.generate_skill_code(plan, requirement)
-                
-                # 4. Save Skill
-                save_result = generator.save_generated_skill(generated_code)
-                
-                if save_result['success']:
-                    return f"""✅ **新技能生成成功！** (Powered by Skill Generator)
-
-🛠️ **技能名称**: `{final_skill_name}`
-📂 **位置**: `{save_result['skill_dir']}`
-
-此技能已自动部署。请告诉我您想执行的操作（例如："{requirement}"），我会使用新生成的技能来完成。"""
-                else:
-                    return f"❌ 保存技能失败: {save_result.get('error', 'Unknown error')}"
-
-            except Exception as e:
-                return f"❌ 生成技能失败: {str(e)}\n\nDebug Info: Ensure skills/skill-generator is correctly configured."""
-        
-        elif tool_name == "manage_skill":
-            skill_name = tool_args.get("skill_name")
-            action = tool_args.get("action")
-            
-            import shutil
-            from pathlib import Path
-            base_dir = Path(__file__).resolve().parent.parent / "personal-skills" / skill_name
-            
-            if action == 'delete':
-                if base_dir.exists():
-                    shutil.rmtree(base_dir)
-                    return f"🗑️ 技能 '{skill_name}' 已删除。"
-                else:
-                    return f"⚠️ 技能 '{skill_name}' 不存在。"
-            elif action == 'save':
-                if base_dir.exists():
-                    return f"💾 技能 '{skill_name}' 已确认保存到个人技能库。"
-                else:
-                    return f"⚠️ 技能 '{skill_name}' 不存在，无法保存。"
-
-        # === Dynamic Skill Execution ===
-        else:
-            # Check if it is a dynamically loaded personal skill
-            import sys
-            import importlib.util
-            from pathlib import Path
-            
-            skill_dir = Path(__file__).resolve().parent.parent / "personal-skills" / tool_name
-            
-            if not (skill_dir.exists() and (skill_dir / "scripts" / "main.py").exists()):
-                 return f"❌ Error: Unknown tool '{tool_name}'"
-
-            # Retry Loop for Self-Correction
-            max_retries = 1
-            attempt = 0
-            
-            while attempt <= max_retries:
-                attempt += 1
-                
-                try:
-                    # 1. Load Module
-                    sys.path.insert(0, str(skill_dir / "scripts"))
-                    if tool_name in sys.modules:
-                         del sys.modules[tool_name] # Force reload
-                    
-                    # Dynamic import
-                    spec = importlib.util.spec_from_file_location("dynamic_skill", skill_dir / "scripts" / "main.py")
-                    module = importlib.util.module_from_spec(spec)
-                    sys.modules[f"personal_skill_{tool_name}"] = module
-                    spec.loader.exec_module(module)
-                    
-                    if not hasattr(module, 'execute_skill'):
-                        return f"❌ Error: Skill '{tool_name}' has no execute_skill function."
-
-                    # 2. Map Arguments
-                    # Map args based on tool name (simplified mapping for demo)
-                    call_args = {}
-                    # 2. Map Arguments
-                    call_args = {}
-                    if tool_name == "batch_transfer":
-                        # Support both direct list and JSON string
-                        recipients = tool_args.get("recipients", [])
-                        if isinstance(recipients, str):
-                            try:
-                                recipients = json.loads(recipients)
-                            except:
-                                pass
-                        
-                        call_args = {
-                            "from_address": user_wallet,
-                            "recipients": recipients,
-                            "token": tool_args.get("token", "TRX"),
-                            "network": network,
-                            **tool_args
-                        }
-                    elif tool_name == "wallet_summary":
-                        call_args = {
-                            "address": tool_args.get("address") or user_wallet,
-                            "network": network
-                        }
-                    else:
-                        call_args = tool_args
-                        
-                    # 3. Execute
-                    print(f"🔧 [Dynamic Skill] Executing '{tool_name}' (Attempt {attempt})...")
-                    result = await module.execute_skill(**call_args)
-                    
-                    # Format output based on result
-                    output_msg = str(result)
-                    if isinstance(result, dict):
-                        if result.get('success'):
-                             output_msg = result.get('message', '✅ Success')
-                        else:
-                             # If success=False, treat as error for retry/repair
-                             raise Exception(result.get('message', result.get('error', 'Unknown error')))
-                    
-                    return output_msg
-
-                except Exception as e:
-                    error_msg = str(e)
-                    print(f"❌ [Dynamic Skill] Attempt {attempt} failed: {error_msg}")
-                    
-                    if attempt > max_retries:
-                         return f"❌ Error executing dynamic skill '{tool_name}': {error_msg}"
-                    
-                    # Attempt Self-Correction
-                    print(f"⚠️ Attempting to fix skill '{tool_name}' with AI...")
-                    try:
-                        code_path = skill_dir / "scripts" / "main.py"
-                        code = code_path.read_text(encoding='utf-8')
-                        
-                        from skills.skill_generator.scripts import generator
-                        if ai_client:
-                            refine_result = await generator.refine_skill(
-                                skill_name=tool_name,
-                                error=error_msg,
-                                code=code,
-                                client=ai_client
-                            )
-                            
-                            if refine_result['success']:
-                                print(f"✅ Skill fixed! Retrying...")
-                                continue # Retry loop
-                    except Exception as fix_err:
-                        print(f"❌ Self-correction failed: {fix_err}")
-                    
-                    return f"❌ 执行并尝试修复失败: {error_msg}"
-
+        args = _normalize_tool_args(tool_name, tool_args, user_wallet, network)
+        result = await asyncio.to_thread(tron_tools.call_tool, tool_name, args)
+        if isinstance(result, (dict, list)):
+            return json.dumps(result, ensure_ascii=False)
+        if result is None:
+            return "✅ Done"
+        return str(result)
     except Exception as e:
         return f"❌ Tool Execution Error: {str(e)}"
 
@@ -1372,23 +1064,16 @@ async def chat(request: ChatRequest):
     # Check for clear command
     if request.message.strip().lower() in ["clear", "reset", "清除", "重置"]:
         CONVERSATION_HISTORY = []
-        async def clear_gen():
-             yield "🧹 Memory cleared. Context reset."
-        return StreamingResponse(clear_gen(), media_type="text/plain")
+        return PlainTextResponse("🧹 Memory cleared. Context reset.")
 
-    async def generate():
+    async def generate_response() -> str:
         # If no AI client, use fallback
         if not ai_client:
-             fallback = get_fallback_response(request.message, request.wallet_address)
-             for char in fallback:
-                yield char
-                await asyncio.sleep(0.01)
-             return
+            return get_fallback_response(request.message, request.wallet_address)
 
-        # Prepare available tools
-        # We need to filter tools if certain conditions aren't met? No, LLM decides.
-        
-        system_prompt = f"""You are TRON Copilot, an expert AI assistant for the TRON blockchain.
+        system_prompt = f"""{SYSTEM_TOOL_POLICY}
+
+You are TRON Copilot, an expert AI assistant for the TRON blockchain.
 Connected User Wallet: {request.wallet_address if request.wallet_address else 'Not Connected'}
 
 Your goal is to help users manage assets, check prices, and stay safe.
@@ -1406,7 +1091,7 @@ Use the available tools to answer user questions.
   4. ⚡ energy-rental - 能量计算 (TRC20)
   5. 🔨 build-transfer - 构建交易
 
-- **新功能生成**: 如果用户请求的功能（如批量转账、钱包概览、DeFi分析）没在上述列表里，**你必须**调用 `generate_skill` 来创建该功能。不要尝试手动分步执行。
+- **新功能生成**: 对未知需求，**优先**调用 `custom_tools_write` 创建工具，然后调用 `custom_tools_reload` 热加载，再使用新工具。若已有同名工具存在，先调用它。
 
 ## 重要规则
 
@@ -1418,269 +1103,175 @@ Use the available tools to answer user questions.
 
 如果不知道答案，直接说不知道。"""
 
-        # Construct messages with history
         messages = [{"role": "system", "content": system_prompt}]
         messages.extend(CONVERSATION_HISTORY[-10:])
         messages.append({"role": "user", "content": request.message})
 
         try:
-            # Prepare tools including dynamic personal skills
-            all_tools = TOOLS + get_personal_skills_tools()
-            
-            # 1. First API Call: Send User Message + Tools
+            all_tools = get_llm_tools()
             response = await ai_client.chat.completions.create(
                 model=Config.AI_MODEL,
                 messages=messages,
                 tools=all_tools,
                 tool_choice="auto",
-                stream=True
+                stream=False,
             )
+            choice = response.choices[0].message
+            full_content = choice.content or ""
+            tool_calls = choice.tool_calls or []
 
-            # Accumulate stream for tool calls or text
-            full_content = ""
-            tool_calls = []
-            current_tool_call = None
-
-            async for chunk in response:
-                delta = chunk.choices[0].delta
-                
-                # Check for content
-                if delta.content:
-                    content_chunk = delta.content
-                    full_content += content_chunk
-                    # Yield text immediately if no tool calls expected yet
-                    if not tool_calls and not current_tool_call:
-                         yield content_chunk
-                         await asyncio.sleep(0.005)
-
-                # Check for tool calls
-                if delta.tool_calls:
-                    for tc in delta.tool_calls:
-                        # Logic to handle new vs existing tool call chunks
-                        if tc.id:
-                            # If we have a current tool call and the ID is different, flush the current one
-                            if current_tool_call and tc.id != current_tool_call["id"]:
-                                tool_calls.append(current_tool_call)
-                                current_tool_call = None
-                            
-                            # If no current tool call (or we just flushed), create new
-                            if not current_tool_call:
-                                current_tool_call = {
-                                    "id": tc.id,
-                                    "function": {
-                                        "name": tc.function.name or "",
-                                        "arguments": ""
-                                    }
-                                }
-                        
-                        # Update name if present (and we have a current tool call)
-                        if tc.function.name and current_tool_call:
-                             if not current_tool_call["function"]["name"]:
-                                 current_tool_call["function"]["name"] = tc.function.name
-
-                        # Update arguments
-                        if tc.function.arguments and current_tool_call:
-                            current_tool_call["function"]["arguments"] += tc.function.arguments
-
-            # Finish last tool call
-            if current_tool_call:
-                tool_calls.append(current_tool_call)
-            
-            # If we had tool calls, execute them
             if tool_calls:
-                # Add the assistant's request to valid messages logic? 
-                # OpenAI requires the message with tool_calls to be in history
-                # But since we streamed, we need to reconstruct the message object
                 assistant_msg = {
                     "role": "assistant",
                     "content": full_content if full_content else None,
                     "tool_calls": [
                         {
-                            "id": tc["id"],
+                            "id": tc.id,
                             "type": "function",
-                            "function": tc["function"]
-                        } for tc in tool_calls
-                    ]
+                            "function": {
+                                "name": tc.function.name or "",
+                                "arguments": tc.function.arguments or "",
+                            },
+                        }
+                        for tc in tool_calls
+                    ],
                 }
                 messages.append(assistant_msg)
 
-                # Execute tools
-                tool_json_blocks = []  # Store JSON blocks to yield after LLM response
-                
-                # Display skill calls to user
-                if len(tool_calls) > 0:
-                    yield "\n\n---\n\n"
-                    yield "🔧 **正在执行 Skills**：\n\n"
-                
+                output_chunks = []
+                tool_json_blocks = []
+                output_chunks.append("\n\n---\n\n")
+                output_chunks.append("🔧 **正在执行 Skills**：\n\n")
+
                 for tc in tool_calls:
-                    fn_name = tc["function"]["name"]
-                    fn_args_str = tc["function"]["arguments"]
-                    
+                    fn_name = tc.function.name or ""
+                    fn_args_str = tc.function.arguments or "{}"
                     try:
                         fn_args = json.loads(fn_args_str)
                     except json.JSONDecodeError:
-                         fn_args = {}
-                    
-                    # Special handling for transfer_tokens: stream each sub-skill result
+                        fn_args = {}
+
                     if fn_name == "transfer_tokens":
                         to_address = fn_args.get("to_address", "")
                         token = fn_args.get("token", "TRX")
                         amount = fn_args.get("amount", 0)
-                        
-                        # Step 1: Address Book
-                        yield "📇 **Step 1/5 - 地址簿查询**\n"
-                        try:
-                            from skills.address_book.scripts.manage_contacts import get_contact_alias, save_contact
-                        except ImportError:
-                            import sys
-                            from pathlib import Path
-                            skill_path = Path(__file__).resolve().parent.parent / "skills" / "address-book" / "scripts"
-                            sys.path.insert(0, str(skill_path))
-                            from manage_contacts import get_contact_alias, save_contact
-                        
-                        # Get memo from args (user-provided note)
-                        memo = fn_args.get("memo", "").strip()
-                        existing_alias = get_contact_alias(to_address)
-                        
-                        # If user provided memo, use it as new alias
-                        if memo:
-                            save_contact(to_address, alias=memo, increment_count=True)
-                            if existing_alias and existing_alias != memo:
-                                yield f"   ✅ 已更新联系人: **{existing_alias}** → **{memo}**\n\n"
-                            else:
-                                yield f"   ✅ 已保存联系人别名: **{memo}**\n\n"
-                        elif existing_alias:
-                            save_contact(to_address, alias=existing_alias, increment_count=True)
-                            yield f"   ✅ 已知联系人: **{existing_alias}**\n\n"
-                        else:
-                            save_contact(to_address, alias=None, increment_count=True)
-                            yield f"   ℹ️ 新地址，已添加到通讯录\n\n"
-                        await asyncio.sleep(0.1)
-                        
-                        # Step 2: Malicious Check
-                        yield "🚨 **Step 2/5 - 恶意地址检测**\n"
-                        try:
-                            import sys
-                            from pathlib import Path
-                            skill_path = Path(__file__).resolve().parent.parent / "skills" / "malicious-address-detector" / "scripts"
-                            sys.path.insert(0, str(skill_path))
-                            from check_malicious import check_malicious_address
-                            malicious_result = await check_malicious_address(to_address, request.network)
-                            if malicious_result.get('is_malicious'):
-                                yield f"   🛑 **危险！此地址已被标记为恶意地址**\n"
-                                yield f"   ⚠️ 建议：放弃此次转账\n\n"
-                            else:
-                                yield f"   ✅ 未发现恶意标签\n\n"
-                        except Exception as e:
-                            yield f"   ⚠️ 检测跳过: {str(e)[:50]}\n\n"
-                        await asyncio.sleep(0.1)
-                        
-                        # Step 3: Risk Check
-                        yield "🔒 **Step 3/5 - 安全风险评估**\n"
-                        try:
-                            from tool_wrappers import check_address_security
-                            risk_result = await check_address_security(to_address)
-                            risk_level = risk_result.get('risk_level', 'UNKNOWN')
-                            if risk_level in ['SAFE', 'LOW']:
-                                yield f"   ✅ 风险评估: {risk_level}\n\n"
-                            elif risk_level == 'HIGH':
-                                yield f"   ⚠️ 高风险地址，请谨慎操作\n\n"
-                            else:
-                                yield f"   ℹ️ 风险级别: {risk_level}\n\n"
-                        except Exception as e:
-                            yield f"   ⚠️ 评估跳过: {str(e)[:50]}\n\n"
-                        await asyncio.sleep(0.1)
-                        
-                        # Step 4: Energy Calculation (TRC20 only)
-                        if token.upper() != 'TRX':
-                            yield "⚡ **Step 4/5 - 能量计算**\n"
-                            yield f"   📊 {token.upper()} 转账预计需要 ~28,000 能量\n"
-                            yield f"   💡 建议使用能量租赁节省费用\n\n"
-                            await asyncio.sleep(0.1)
-                        else:
-                            yield "⚡ **Step 4/5 - 资源检查**\n"
-                            yield f"   ✅ TRX 转账仅需带宽，无需能量\n\n"
-                            await asyncio.sleep(0.1)
-                        
-                        # Step 5: Build Transaction
-                        yield "🔨 **Step 5/5 - 构建交易**\n"
-                        result_str = await execute_tool(fn_name, fn_args, request.wallet_address, request.network)
-                        
-                        # Check for error
+
+                        output_chunks.append("📇 **Step 1/5 - 地址簿查询**\n")
+                        step_result = await execute_tool(
+                            "record_transfer",
+                            {"to_address": to_address},
+                            request.wallet_address,
+                            request.network,
+                        )
+                        output_chunks.append(f"{step_result}\n\n")
+
+                        output_chunks.append("🚨 **Step 2/5 - 恶意地址检测**\n")
+                        step_result = await execute_tool(
+                            "check_malicious",
+                            {"address": to_address, "network": request.network},
+                            request.wallet_address,
+                            request.network,
+                        )
+                        output_chunks.append(f"{step_result}\n\n")
+
+                        output_chunks.append("🔒 **Step 3/5 - 安全风险评估**\n")
+                        step_result = await execute_tool(
+                            "check_address_security",
+                            {"address": to_address},
+                            request.wallet_address,
+                            request.network,
+                        )
+                        output_chunks.append(f"{step_result}\n\n")
+
+                        output_chunks.append("⚡ **Step 4/5 - 能量计算**\n")
+                        step_result = await execute_tool(
+                            "calculate_energy",
+                            {"token": token, "network": request.network},
+                            request.wallet_address,
+                            request.network,
+                        )
+                        output_chunks.append(f"{step_result}\n\n")
+
+                        output_chunks.append("🔨 **Step 5/5 - 构建交易**\n")
+                        result_str = await execute_tool(
+                            "build_transfer",
+                            {
+                                "to_address": to_address,
+                                "token": token,
+                                "amount": amount,
+                                "memo": fn_args.get("memo", ""),
+                                "network": request.network,
+                            },
+                            request.wallet_address,
+                            request.network,
+                        )
                         if "❌" in result_str or "Error" in result_str:
-                            yield f"   ❌ 构建失败\n\n"
+                            output_chunks.append("   ❌ 构建失败\n\n")
                         else:
-                            yield f"   ✅ 交易已生成，等待签名\n\n"
-                        
-                        yield "---\n\n"
+                            output_chunks.append("   ✅ 交易已生成，等待签名\n\n")
+                        output_chunks.append("---\n\n")
                     else:
-                        # Normal tool execution
                         tool_descriptions = {
                             "get_token_price": "查询代币价格",
                             "get_wallet_balance": "获取钱包余额",
                             "check_address_security": "检查地址安全性",
                         }
                         desc = tool_descriptions.get(fn_name, fn_name)
-                        yield f"• {desc} (`{fn_name}`)\n"
-                        result_str = await execute_tool(fn_name, fn_args, request.wallet_address, request.network)
-                    
-                    # Extract JSON blocks (<<<JSON...JSON>>>) from result
+                        output_chunks.append(f"• {desc} (`{fn_name}`)\n")
+                        result_str = await execute_tool(
+                            fn_name,
+                            fn_args,
+                            request.wallet_address,
+                            request.network,
+                        )
+                        if result_str:
+                            output_chunks.append(f"{result_str}\n\n")
+
                     import re
                     json_pattern = r'<<<JSON\s*(.*?)\s*JSON>>>'
-                    matches = re.findall(json_pattern, result_str, re.DOTALL)
+                    matches = re.findall(json_pattern, result_str or "", re.DOTALL)
                     if matches:
                         for json_content in matches:
                             tool_json_blocks.append(f"<<<JSON\n{json_content}\nJSON>>>")
-                    
-                    # Add result to messages
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": tc["id"],
-                        "content": result_str
-                    })
 
-                # 2. Second API Call: Send Tool Results -> Valid Response
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tc.id,
+                            "content": result_str or "",
+                        }
+                    )
+
                 second_response = await ai_client.chat.completions.create(
                     model=Config.AI_MODEL,
                     messages=messages,
-                    stream=True
+                    stream=False,
                 )
+                final_content = second_response.choices[0].message.content or ""
 
-                # First, stream the LLM's natural language response
-                full_final_content = ""
-                async for chunk in second_response:
-                    if chunk.choices[0].delta.content:
-                        content = chunk.choices[0].delta.content
-                        full_final_content += content
-                        yield content
-                        await asyncio.sleep(0.005)
-
-                # Record History (Complex interaction)
                 CONVERSATION_HISTORY.append({"role": "user", "content": request.message})
-                # Note: assistant_msg (tool calls) was created earlier
-                CONVERSATION_HISTORY.append(assistant_msg) 
-                
-                # Append tool outputs from messages list
+                CONVERSATION_HISTORY.append(assistant_msg)
                 for msg in messages:
                     if msg.get("role") == "tool":
                         CONVERSATION_HISTORY.append(msg)
-                        
-                CONVERSATION_HISTORY.append({"role": "assistant", "content": full_final_content})
-                
-                # Then, append the JSON blocks at the end
-                for json_block in tool_json_blocks:
-                    yield "\n\n" + json_block
-            
-            # 3. No Tool Calls Case
-            if not tool_calls:
-                 CONVERSATION_HISTORY.append({"role": "user", "content": request.message})
-                 CONVERSATION_HISTORY.append({"role": "assistant", "content": full_content})
+                CONVERSATION_HISTORY.append({"role": "assistant", "content": final_content})
+
+                output = "".join(output_chunks) + final_content
+                if tool_json_blocks:
+                    output += "\n\n" + "\n\n".join(tool_json_blocks)
+                return output
+
+            CONVERSATION_HISTORY.append({"role": "user", "content": request.message})
+            CONVERSATION_HISTORY.append({"role": "assistant", "content": full_content})
+            return full_content
 
         except Exception as e:
             print(f"Agent Loop Error: {e}")
-            yield f"❌ AI Error: {str(e)}"
-    
-    return StreamingResponse(generate(), media_type="text/plain")
+            return f"❌ AI Error: {str(e)}"
+
+    return PlainTextResponse(await generate_response())
+    return PlainTextResponse(await generate_response())
+
 
 
 @app.get("/health")

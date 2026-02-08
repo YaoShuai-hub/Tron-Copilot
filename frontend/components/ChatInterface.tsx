@@ -76,44 +76,31 @@ export function ChatInterface() {
                 throw new Error('Failed to fetch');
             }
 
-            const reader = response.body?.getReader();
-            const decoder = new TextDecoder();
-
-            if (!reader) {
-                throw new Error('No reader available');
-            }
-
             parserRef.current.reset();
             let accumulatedText = '';
 
-            // Read stream
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
+            const fullText = await response.text();
+            const parsed = parserRef.current.parse(fullText);
+            const remaining = parserRef.current.flush();
 
-                const chunk = decoder.decode(value);
-                const parsed = parserRef.current.parse(chunk);
-
-                for (const item of parsed) {
-                    if (item.type === 'text') {
-                        accumulatedText += item.content;
-                        updateMessage(assistantMessageId, accumulatedText);
-                    } else if (item.type === 'transaction') {
-                        // Add transaction to message
-                        const currentMessages = useChatStore.getState().messages;
-                        const messageToUpdate = currentMessages.find(m => m.id === assistantMessageId);
-                        if (messageToUpdate) {
-                            useChatStore.setState({
-                                messages: currentMessages.map(m =>
-                                    m.id === assistantMessageId
-                                        ? {
-                                            ...m,
-                                            transactions: [...(m.transactions || []), item.transaction]
-                                        }
-                                        : m
-                                ),
-                            });
-                        }
+            for (const item of [...parsed, ...remaining]) {
+                if (item.type === 'text') {
+                    accumulatedText += item.content;
+                    updateMessage(assistantMessageId, accumulatedText);
+                } else if (item.type === 'transaction') {
+                    const currentMessages = useChatStore.getState().messages;
+                    const messageToUpdate = currentMessages.find(m => m.id === assistantMessageId);
+                    if (messageToUpdate) {
+                        useChatStore.setState({
+                            messages: currentMessages.map(m =>
+                                m.id === assistantMessageId
+                                    ? {
+                                        ...m,
+                                        transactions: [...(m.transactions || []), item.transaction]
+                                    }
+                                    : m
+                            ),
+                        });
                     }
                 }
             }

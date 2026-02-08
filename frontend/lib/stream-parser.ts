@@ -83,4 +83,21 @@ export class StreamParser {
         this.inJsonBlock = false;
         this.jsonBuffer = '';
     }
+
+    flush(): ParsedChunk[] {
+        const results: ParsedChunk[] = [];
+        if (this.inJsonBlock) {
+            // Treat any unterminated JSON marker content as text to avoid truncation.
+            const content = (this.jsonBuffer || '') + (this.buffer || '');
+            if (content) {
+                results.push({ type: 'text', content });
+            }
+        } else if (this.buffer) {
+            results.push({ type: 'text', content: this.buffer });
+        }
+        this.buffer = '';
+        this.inJsonBlock = false;
+        this.jsonBuffer = '';
+        return results;
+    }
 }
