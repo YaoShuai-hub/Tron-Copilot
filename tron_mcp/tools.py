@@ -9,7 +9,9 @@ from typing import Any, Dict, List, Optional
 from . import settings
 from .extensions import tx_assistant, trc20_assistant, agent_pipeline, local_signer
 from .modules import chain_ops, funds_flow, notify_telegram, bash_tool
+from .custom_tools import manager as custom_tools_manager
 from .modules import audit_log, market_data, exchange_adapter, risk_monitor, onchain_monitor
+from . import custom_tools
 from .utils.errors import ValidationError
 from .tron_api import (
     fetch_account,
@@ -151,6 +153,8 @@ def list_tools() -> Dict[str, Any]:
     tools.extend(trc20_assistant.TOOL_DEFINITIONS)
     tools.extend(agent_pipeline.TOOL_DEFINITIONS)
     tools.extend(local_signer.TOOL_DEFINITIONS)
+    tools.extend(custom_tools.get_tool_definitions())
+    tools.extend(custom_tools_manager.TOOL_DEFINITIONS)
     tools.extend(chain_ops.TOOL_DEFINITIONS)
     tools.extend(funds_flow.TOOL_DEFINITIONS)
     tools.extend(notify_telegram.TOOL_DEFINITIONS)
@@ -709,6 +713,8 @@ def call_tool(name: str, args: Optional[Dict[str, Any]]) -> Any:
         return agent_pipeline.call_tool(name, args)
     if name in local_signer.TOOL_NAMES:
         return local_signer.call_tool(name, args)
+    if name in custom_tools.get_tool_names():
+        return custom_tools.call_tool(name, args)
     if name in chain_ops.TOOL_NAMES:
         return chain_ops.call_tool(name, args)
     if name in funds_flow.TOOL_NAMES:

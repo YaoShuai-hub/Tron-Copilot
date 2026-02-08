@@ -45,6 +45,12 @@ except Exception:
 log = logging.getLogger("agent_runner")
 console = Console()
 
+SYSTEM_TOOL_POLICY = (
+    "If the available tools cannot solve the task, you may create a new custom tool by "
+    "calling custom_tools_write with a Python module (define TOOL_DEFINITIONS and call_tool), "
+    "then call custom_tools_reload, and then use the new tool. "
+    "If the tool is buggy, iteratively rewrite it and reload."
+)
 
 def heuristic_fallback(prompt: str) -> Dict[str, Any] | None:
     """If LLM fails, try to dispatch tools directly based on simple keywords."""
@@ -179,8 +185,10 @@ def agent_chat(
     if messages is None:
         if not user_prompt:
             raise ValidationError("user_prompt is required when messages is not provided")
-        messages = [{"role": "user", "content": user_prompt}]
+        messages = [{"role": "system", "content": SYSTEM_TOOL_POLICY}, {"role": "user", "content": user_prompt}]
     elif user_prompt:
+        if not any(m.get("role") == "system" for m in messages):
+            messages.insert(0, {"role": "system", "content": SYSTEM_TOOL_POLICY})
         messages.append({"role": "user", "content": user_prompt})
 
     trace: List[Dict[str, Any]] = []

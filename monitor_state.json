@@ -1,0 +1,9 @@
+{
+  "TM7S769qMobxfuvN73ASpyuwZUQS29JZmC": {
+    "target_address": "TMP4FFPpKFDqMW99EdtjU8SrYfuANCZT",
+    "check_interval": 30,
+    "min_transfer_amount": 1.0,
+    "enabled": true,
+    "last_update": "2026-02-08T18:58:01.492729"
+  }
+}

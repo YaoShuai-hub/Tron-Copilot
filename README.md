@@ -94,6 +94,18 @@
 | `get_total_value(address, currency)` | 所有币种总价值 | TRONSCAN + CoinGecko | usd/cny |
 | `run_bash_command(command, cwd?, timeout_sec?, max_output_chars?)` | 执行本地 bash 指令 | 本地 | 仅限仓库内路径 |
 
+### 11) Custom Tools（动态工具）
+| 工具 | 作用 | 数据源 | 备注 |
+| --- | --- | --- | --- |
+| `custom_tools_write(file_name, code, overwrite?, reload?)` | 写入自定义工具 | 本地 | 保存到 `tron_mcp/custom_tools` |
+| `custom_tools_reload()` | 重新加载自定义工具 | 本地 | 热加载 |
+| `custom_tools_clear()` | 清空自定义工具 | 本地 | 删除 `tron_mcp/custom_tools` 下的文件 |
+
+自定义工具说明：
+- 自定义工具文件放在 `tron_mcp/custom_tools/`（例如 `tool_example.py`）
+- 每个文件需定义 `TOOL_DEFINITIONS`（list）和 `call_tool(name, args)` 函数
+- 写完后调用 `custom_tools_reload` 进行热加载
+
 ## ⚡ 快速开始
 ```bash
 cd ~/Documents/ctf/blockchain/program/HK_hacker_26/trident-mcp

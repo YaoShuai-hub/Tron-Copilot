@@ -459,7 +459,9 @@ def onchain_alerts(
                 )
             msg = "\n".join(lines)
             if target_broadcast:
-                telegram_broadcast(msg)
+                res = telegram_broadcast(msg)
+                if not res.get("ok"):
+                    send_telegram(msg, chat_id=target_chat)
             else:
                 send_telegram(msg, chat_id=target_chat)
 
@@ -475,7 +477,9 @@ def onchain_alerts(
                 )
             msg = "\n".join(lines)
             if broadcast:
-                telegram_broadcast(msg)
+                res = telegram_broadcast(msg)
+                if not res.get("ok"):
+                    send_telegram(msg, chat_id=chat_id)
             else:
                 send_telegram(msg, chat_id=chat_id)
         # no alerts -> no message

@@ -10,15 +10,24 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import threading
+import asyncio
+import inspect
 
 from tron_mcp import settings, tools
 from tron_mcp.ai import call_chat
 from tron_mcp.utils.errors import UpstreamError, ValidationError
 from tron_mcp.modules import notify_telegram, onchain_monitor, risk_monitor
+from tron_mcp.utils.logging_setup import setup_logging
 
 
 log = logging.getLogger("telegram_bot")
 
+SYSTEM_TOOL_POLICY = (
+    "If the available tools cannot solve the task, you may create a new custom tool by "
+    "calling custom_tools_write with a Python module (define TOOL_DEFINITIONS and call_tool), "
+    "then call custom_tools_reload, and then use the new tool. "
+    "If the tool is buggy, iteratively rewrite it and reload."
+)
 
 def _load_env_private(path: Path) -> dict:
     env = {}
@@ -87,14 +96,34 @@ def _trim_message(text: str, limit: int = 3500) -> str:
     return text[:limit] + "...(truncated)"
 
 
+def _await_if_needed(result: Any) -> Any:
+    if not inspect.isawaitable(result):
+        return result
+    try:
+        return asyncio.run(result)
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(result)
+        finally:
+            loop.close()
+
+
+def _call_tool_sync(name: str, args: Dict[str, Any]) -> Any:
+    result = tools.call_tool(name, args)
+    return _await_if_needed(result)
+
+
 def _exec_tool_call(name: str, arguments_json: str) -> Dict[str, Any]:
     try:
         args = json.loads(arguments_json or "{}")
     except json.JSONDecodeError as err:
         return {"error": f"Invalid arguments JSON: {err}", "raw": arguments_json}
     try:
-        return tools.call_tool(name, args)
+        log.info("Executing tool '%s' with arguments: %s", name, arguments_json)
+        return _call_tool_sync(name, args)
     except Exception as err:  # noqa: BLE001
+        log.warning("Tool '%s' failed: %s", name, err)
         return {"error": f"Tool execution failed: {err}"}
 
 
@@ -109,7 +138,7 @@ def _needs_verification(name: str, args: Dict[str, Any]) -> bool:
 def _build_unsigned_preview(name: str, args: Dict[str, Any]) -> Dict[str, Any] | None:
     try:
         if name == "transfer_trx_local_sign_broadcast":
-            return tools.call_tool(
+            return _call_tool_sync(
                 "create_unsigned_trx_transfer",
                 {
                     "from_address": args.get("from_address"),
@@ -122,7 +151,7 @@ def _build_unsigned_preview(name: str, args: Dict[str, Any]) -> Dict[str, Any] |
             preview_args = dict(args or {})
             preview_args["sign"] = False
             preview_args["broadcast"] = False
-            return tools.call_tool("chain_transfer_flow", preview_args)
+            return _call_tool_sync("chain_transfer_flow", preview_args)
     except Exception:
         return None
     return None
@@ -142,6 +171,8 @@ def _agent_loop(
 ) -> Dict[str, Any]:
     tool_schema = tools.list_tools()["tools"]
     history: List[Dict[str, Any]] = list(messages or [])
+    if not any(m.get("role") == "system" for m in history):
+        history.insert(0, {"role": "system", "content": SYSTEM_TOOL_POLICY})
     history.append({"role": "user", "content": user_text})
 
     for _ in range(max_rounds):
@@ -201,6 +232,7 @@ def _agent_loop(
                 result = {"status": "VERIFICATION_REQUIRED", "message": "OTP sent to Telegram."}
             else:
                 result = _exec_tool_call(name, arguments)
+            log.info("Tool '%s' result: %s", name, result)
             history.append(
                 {
                     "role": "tool",
@@ -259,6 +291,7 @@ def run_telegram_bot(poll_timeout: int = 20, max_rounds: int = 12) -> None:
                 notify_telegram.send_telegram(
                     message="已连接到本地助手。直接发送问题即可。\n"
                     "支持 /reset 清空上下文。\n"
+                    "支持 /clearcustomtools 清空自定义工具。\n"
                     "如需订阅通知，请运行 telegram_subscribe。",
                     chat_id=chat_id,
                 )
@@ -267,6 +300,13 @@ def run_telegram_bot(poll_timeout: int = 20, max_rounds: int = 12) -> None:
                 conversations.pop(chat_id, None)
                 pending_verifications.pop(chat_id, None)
                 notify_telegram.send_telegram(message="上下文已清空。", chat_id=chat_id)
+                continue
+            if text == "/clearcustomtools":
+                try:
+                    tools.call_tool("custom_tools_clear", {})
+                    notify_telegram.send_telegram(message="自定义工具已清空。", chat_id=chat_id)
+                except Exception as err:  # noqa: BLE001
+                    notify_telegram.send_telegram(message=f"清空失败: {err}", chat_id=chat_id)
                 continue
 
             if allowed_chats is not None and chat_id not in allowed_chats:
@@ -342,7 +382,7 @@ def _start_monitors() -> None:
                     onchain_monitor.onchain_alerts(
                         rules_path=rules_path,
                         notify=True,
-                        broadcast=False,
+                        broadcast=True,
                         log_audit=True,
                     )
                 except Exception as err:  # noqa: BLE001
@@ -380,7 +420,7 @@ def _start_monitors() -> None:
 
 
 def main() -> int:
-    logging.basicConfig(level="INFO")
+    setup_logging(level="INFO", logfile="logs/telegram_bot.log", console=True)
     run_telegram_bot()
     return 0
 
