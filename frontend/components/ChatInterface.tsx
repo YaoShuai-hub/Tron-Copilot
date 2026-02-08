@@ -20,6 +20,7 @@ export function ChatInterface() {
     const { network } = useNetwork(); // Get detected network
 
     const [input, setInput] = useState('');
+    const [toolCards, setToolCards] = useState<Array<{ name: string; description: string }>>([]);
     const virtuosoRef = useRef<any>(null);
     const parserRef = useRef(new StreamParser());
 
@@ -34,6 +35,26 @@ export function ChatInterface() {
             });
         }
     }, [messages.length]);
+
+    useEffect(() => {
+        let active = true;
+        const loadTools = async () => {
+            try {
+                const resp = await fetch('/api/tools');
+                if (!resp.ok) return;
+                const data = await resp.json();
+                if (active && Array.isArray(data.tools)) {
+                    setToolCards(data.tools);
+                }
+            } catch {
+                // ignore tool list load failures
+            }
+        };
+        loadTools();
+        return () => {
+            active = false;
+        };
+    }, []);
 
     const handleSend = useCallback(async () => {
         if (!input.trim() || isStreaming) return;
@@ -124,7 +145,7 @@ export function ChatInterface() {
             {/* Chat Messages */}
             <div className="flex-1 overflow-hidden">
                 {messages.length === 0 ? (
-                    <EmptyState setInput={setInput} />
+                    <EmptyState setInput={setInput} tools={toolCards} />
                 ) : (
                     <Virtuoso
                         ref={virtuosoRef}
@@ -179,7 +200,13 @@ export function ChatInterface() {
 }
 
 
-function EmptyState({ setInput }: { setInput: (value: string) => void }) {
+function EmptyState({
+    setInput,
+    tools,
+}: {
+    setInput: (value: string) => void;
+    tools: Array<{ name: string; description: string }>;
+}) {
     return (
         <div className="flex items-center justify-center h-full relative">
             {/* Radial gradient background */}
@@ -220,17 +247,31 @@ function EmptyState({ setInput }: { setInput: (value: string) => void }) {
                     </p>
                 </motion.div>
 
-                {/* Example Prompts */}
+                {/* Tool Cards */}
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.4 }}
-                    className="grid grid-cols-2 gap-3 mt-8"
+                    className="grid grid-cols-2 gap-3 mt-8 max-h-64 overflow-y-auto pr-1"
                 >
-                    <ExamplePrompt icon="💰" text="查询钱包余额" delay={0.5} setInput={setInput} />
-                    <ExamplePrompt icon="💸" text="转账资产" delay={0.6} setInput={setInput} />
-                    <ExamplePrompt icon="⚡" text="优化能量费用" delay={0.7} setInput={setInput} />
-                    <ExamplePrompt icon="🛡️" text="安全检查" delay={0.8} setInput={setInput} />
+                    {tools.length > 0 ? (
+                        tools.map((tool, idx) => (
+                            <ToolCard
+                                key={tool.name}
+                                name={tool.name}
+                                description={tool.description}
+                                delay={0.4 + idx * 0.02}
+                                setInput={setInput}
+                            />
+                        ))
+                    ) : (
+                        <>
+                            <ExamplePrompt icon="💰" text="查询钱包余额" delay={0.5} setInput={setInput} />
+                            <ExamplePrompt icon="💸" text="转账资产" delay={0.6} setInput={setInput} />
+                            <ExamplePrompt icon="⚡" text="优化能量费用" delay={0.7} setInput={setInput} />
+                            <ExamplePrompt icon="🛡️" text="安全检查" delay={0.8} setInput={setInput} />
+                        </>
+                    )}
                 </motion.div>
 
                 {/* Hint */}
@@ -260,6 +301,35 @@ function ExamplePrompt({ icon, text, delay, setInput }: { icon: string; text: st
             <div className="relative flex items-center gap-2">
                 <span className="text-lg">{icon}</span>
                 <span className="font-medium">{text}</span>
+            </div>
+            <div className="absolute inset-0 bg-gradient-to-r from-tron-500/0 via-tron-500/10 to-tron-500/0 opacity-0 group-hover:opacity-100 transition-opacity" />
+        </motion.div>
+    );
+}
+
+function ToolCard({
+    name,
+    description,
+    delay,
+    setInput,
+}: {
+    name: string;
+    description: string;
+    delay: number;
+    setInput: (value: string) => void;
+}) {
+    return (
+        <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay }}
+            whileHover={{ scale: 1.03, y: -2 }}
+            onClick={() => setInput(name)}
+            className="group relative px-4 py-3 rounded-xl glass border-white/10 text-sm text-gray-300 hover:border-tron-500/50 hover:bg-tron-500/10 transition-all cursor-pointer overflow-hidden text-left"
+        >
+            <div className="relative flex flex-col gap-1">
+                <span className="font-medium text-tron-300">{name}</span>
+                <span className="text-xs text-gray-400 line-clamp-2">{description}</span>
             </div>
             <div className="absolute inset-0 bg-gradient-to-r from-tron-500/0 via-tron-500/10 to-tron-500/0 opacity-0 group-hover:opacity-100 transition-opacity" />
         </motion.div>

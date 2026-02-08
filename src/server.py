@@ -909,6 +909,21 @@ async def get_resources(address: str, network: str = "nile"):
             "address": address
         }
 
+
+@app.get("/api/tools")
+async def list_tools():
+    """Return available tool names and descriptions for the frontend."""
+    items = tron_tools.list_tools().get("tools", [])
+    tools = [
+        {
+            "name": tool.get("name"),
+            "description": tool.get("description", ""),
+        }
+        for tool in items
+        if tool.get("name")
+    ]
+    return {"tools": tools}
+
 # --- Error Analysis Endpoint ---
 
 class ErrorAnalysisRequest(BaseModel):
