@@ -3,9 +3,6 @@
   "notify_on": ["increase", "decrease"],
   "min_change_default": 0.01,
   "state_path": "logs/onchain_state.json",
-  "evm_rpcs": {
-    "ETH": "${EVM_RPC_ETH}"
-  },
   "addresses": [
     {
       "label": "nile-main",
