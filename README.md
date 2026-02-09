@@ -1,4 +1,4 @@
-# 🚀 Trident MCP (TRON)
+# 🚀 Tron-Copilot (TRON)
 
 轻量级 FastMCP stdio 服务器 + 彩色 CLI Agent，帮你快速查询 TRON 费用、USDT 余额、交易状态、TRC20 转账与地址标签。纯 Python，零本地节点依赖。
 
